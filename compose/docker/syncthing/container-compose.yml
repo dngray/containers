@@ -1,0 +1,51 @@
+services:
+  syncthing_1:
+    extends:
+      file: ./syncthing_common.yml
+      service: syncthing
+    container_name: syncthing1
+    environment:
+      - PUID=${PUID1}
+      - PGID=${PGID1}
+    volumes:
+      - /home/${USER1}/.config/syncthing/:/config
+      - /home/${USER1}:/data/${USER1}
+      - /mnt/data/shared:/data/shared
+    ports:
+      - 8384:8384
+      - 22000:22000/tcp
+      - 22000:22000/udp
+      - 21027:21027/udp
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.syncthing1.tls=true"
+      - "traefik.http.routers.syncthing1.entrypoints=websecure"
+      - "traefik.http.routers.syncthing1.rule=Host(`syncthing1.$MY_DOMAIN`)"
+
+  syncthing_2:
+    extends:
+      file: ./syncthing_common.yml
+      service: syncthing
+    container_name: syncthing2
+    environment:
+      - PUID=${PUID2}
+      - PGID=${PGID2}
+    volumes:
+      - /home/${USER2}/.config/syncthing/:/config
+      - /home/${USER2}:/data/${USER2}
+      - /mnt/data/shared:/data/shared
+    ports:
+      - 8385:8384
+      - 22001:22000/tcp
+      - 22001:22000/udp
+      - 21028:21027/udp
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.syncthing2.tls=true"
+      - "traefik.http.routers.syncthing2.entrypoints=websecure"
+      - "traefik.http.routers.syncthing2.rule=Host(`syncthing2.$MY_DOMAIN`)"
+
+networks:
+  default:
+    external:
+      name: $DEFAULT_NETWORK

@@ -1,0 +1,120 @@
+services:
+  vpn_usenet:
+    extends:
+      file: ../vpn/container-compose.yml
+      service: openvpn-client
+    container_name: vpn_usenet
+    volumes:
+      - /mnt/data/container_data/vpn:/data/vpn
+    ports:
+      - 6767:6767
+      - 8989:8989
+      - 7878:7878
+    environment:
+      - KILL_SWITCH=on
+      - SUBNETS=172.18.0.0/16
+      - VPN_CONFIG_FILE=
+    restart: unless-stopped
+
+  # nzbget:
+  #   extends:
+  #     file: usenet_common.yml
+  #     service: usenet_apps
+  #   image: ghcr.io/linuxserver/nzbget
+  #   container_name: nzbget
+  #   network_mode: service:vpn_usenet
+  #   volumes:
+  #     - /mnt/data/container_data/nzbget:/config
+  #   restart: unless-stopped
+
+  sabnzbd:
+    extends:
+      file: usenet_common.yml
+      service: usenet_apps
+    image: ghcr.io/linuxserver/sabnzbd
+    container_name: sabnzbd
+    network_mode: service:vpn_usenet
+    volumes:
+      - /mnt/data/container_data/sabnzbd:/config
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sabnzbd.tls=true"
+      - "traefik.http.routers.sabnzbd.entrypoints=websecure"
+      - "traefik.http.routers.sabnzbd.rule=Host(`sabnzbd.$MY_DOMAIN`)"
+      - "traefik.http.services.sabnzbd.loadbalancer.server.port=6767"
+    restart: unless-stopped
+
+  sonarr:
+    extends:
+      file: usenet_common.yml
+      service: usenet_apps
+    image: ghcr.io/linuxserver/sonarr
+    container_name: sonarr
+    network_mode: service:vpn_usenet
+    volumes:
+      - /mnt/data/container_data/sonarr:/config
+      - /mnt/data/shared/tv:/mnt/shared/tv
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sonarr.tls=true"
+      - "traefik.http.routers.sonarr.entrypoints=websecure"
+      - "traefik.http.routers.sonarr.rule=Host(`sonarr.$MY_DOMAIN`)"
+      - "traefik.http.services.sonarr.loadbalancer.server.port=8989"
+    restart: unless-stopped
+
+  radarr:
+    extends:
+      file: usenet_common.yml
+      service: usenet_apps
+    image: ghcr.io/linuxserver/radarr
+    container_name: radarr
+    network_mode: service:vpn_usenet
+    volumes:
+      - /mnt/data/container_data/radarr:/config
+      - /mnt/data/shared/movies:/mnt/shared/movies
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.radarr.tls=true"
+      - "traefik.http.routers.radarr.entrypoints=websecure"
+      - "traefik.http.routers.radarr.rule=Host(`radarr.$MY_DOMAIN`)"
+      - "traefik.http.services.radarr.loadbalancer.server.port=7878"
+    restart: unless-stopped
+
+  # prowlarr:
+  # extends:
+  #   file: usenet_common.yml
+  #   service: usenet_apps
+  # image: ghcr.io/linuxserver/prowlarr
+  # container_name: prowlarr
+  # network_mode: service:vpn_usenet
+  # volumes:
+  #   - /mnt/data/container_data/nzbhydra:/config
+  #  labels:
+  #    - "traefik.enable=true"
+  #    - "traefik.http.routers.prowlarr.tls=true"
+  #    - "traefik.http.routers.prowlarr.entrypoints=websecure"
+  #    - "traefik.http.routers.prowlarr.rule=Host(`prowlarr.$MY_DOMAIN`)"
+  #    - "traefik.http.services.prowlarr.loadbalancer.server.port=7878"
+  # restart: unless-stopped
+
+  # nzbhydra:
+  # extends:
+  #   file: usenet_common.yml
+  #   service: usenet_apps
+  # image: ghcr.io/linuxserver/nzbhydra2
+  # container_name: nzbhydra
+  # network_mode: service:vpn_usenet
+  # volumes:
+  #   - /mnt/data/container_data/nzbhydra:/config
+  # labels:
+  #   - "traefik.enable=true"
+  #   - "traefik.http.routers.nzbhydra.tls=true"
+  #   - "traefik.http.routers.nzbhydra.entrypoints=websecure"
+  #   - "traefik.http.routers.nzbhydra.rule=Host(`nzbhydra.$MY_DOMAIN`)"
+  #   - "traefik.http.services.nzbhydra.loadbalancer.server.port=7878"
+  # restart: unless-stopped
+
+networks:
+  default:
+    external:
+      name: $DEFAULT_NETWORK

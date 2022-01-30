@@ -1,0 +1,6 @@
+services:
+  syncthing:
+    image: ghcr.io/linuxserver/syncthing
+    environment:
+      - TZ=${TZ}
+    restart: unless-stopped

@@ -1,0 +1,15 @@
+services:
+  samba:
+    image: crazymax/samba
+    container_name: samba
+    hostname: smb.den.home.arpa
+    network_mode: bridge
+    volumes:
+      - "/mnt/data/container_data/samba:/data"
+      - "/home/1:/home/1"
+      - "/home/2:/home/2"
+      - "/mnt/data/shared:/mnt/shared"
+    environment:
+      - "TZ=${TZ}"
+      - "SAMBA_LOG_LEVEL=0"
+    restart: always

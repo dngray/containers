@@ -1,0 +1,11 @@
+tls:
+  certificates:
+    - certFile: "/etc/traefik/certs/den.home.arpa.crt"
+      keyFile: "/etc/traefik/certs/den.home.arpa.key"
+      stores:
+        - default
+  stores:
+    default:
+      defaultCertificate:
+        certFile: "/etc/traefik/certs/den.home.arpa.crt"
+        keyFile: "/etc/traefik/certs/den.home.arpa.key"

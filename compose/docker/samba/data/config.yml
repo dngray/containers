@@ -1,0 +1,39 @@
+auth:
+  - user: 1
+    group: 1
+    uid: 1000
+    gid: 1000
+    password: ${PASS1}
+  - user: 2
+    group: 2
+    uid: 1001
+    gid: 1001
+    password: ${PASS2}
+
+global:
+  - "force group = shared"
+
+share:
+  - name: shared
+    path: /mnt/shared
+    browsable: yes
+    readonly: no
+    guestok: no
+    writelist: shared
+    veto: no
+  - name: 1
+    path: /home/1
+    browsable: yes
+    readonly: no
+    guestok: no
+    validusers: 1
+    writelist: 1
+    veto: no
+  - name: 2
+    path: /home/2
+    browsable: yes
+    readonly: no
+    guestok: no
+    validusers: 2
+    writelist: 2
+    veto: no

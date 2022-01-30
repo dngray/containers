@@ -1,0 +1,29 @@
+## Static configuration
+# https://doc.traefik.io/traefik/routing/entrypoints/
+# https://doc.traefik.io/traefik/https/tls/
+# https://github.com/DoTheEvo/Traefik-v2-examples
+
+log:
+  level: INFO
+
+api:
+  insecure: true
+  dashboard: true
+
+entryPoints:
+  web:
+   address: ":80"
+   http:
+     redirections:
+       entrypoint:
+         to: "websecure"
+         scheme: "https"
+  websecure:
+    address: ":443"
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+  file:
+    filename: /etc/traefik/traefik_tls.yml

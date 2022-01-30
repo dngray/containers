@@ -1,0 +1,22 @@
+services:
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    hostname: traefik
+    networks:
+      - traefik_net
+      - direct1_net
+    ports:
+      - 198.51.100..253:80:80
+      - 198.51.100..253:443:443
+      - 198.51.100..253:8080:8080
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./traefik.yml:/traefik.yml:ro"
+      - "./traefik_tls.yml:/etc/traefik/traefik_tls.yml:ro"
+      - "/mnt/data/container_data/traefik/certs:/etc/traefik/certs:ro"
+networks:
+  traefik_net:
+    external: true
+  direct1_net:
+    external: true

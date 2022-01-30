@@ -1,0 +1,25 @@
+services:
+  vault-server:
+    image: vault
+    container_name: vault
+    volumes:
+      - /mnt/data/container_data/vault/config:/vault/config:rw
+      - /mnt/data/container_data/vault/data:/vault/data:rw
+    ports:
+      - 8200:8200
+    cap_add:
+      - IPC_LOCK
+    entrypoint: vault server -config=/vault/config/vault.hcl
+    environment:
+      - VAULT_ADDR=http://198.51.100.253:8200
+      - VAULT_API_ADDR=http://198.51.100.253:8200
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vault-server.tls=true"
+      - "traefik.http.routers.vault-server.entrypoints=websecure"
+      - "traefik.http.routers.vault-server.rule=Host(`vault.$MY_DOMAIN`)"
+
+networks:
+  default:
+    external:
+      name: $DEFAULT_NETWORK

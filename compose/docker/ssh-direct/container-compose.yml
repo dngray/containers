@@ -1,0 +1,22 @@
+services:
+  openssh-server:
+    image: ghcr.io/linuxserver/openssh-server
+    container_name: direct1
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - PUBLIC_KEY_DIR=/mnt/data/container_data/ssh/pubkeys
+      - SUDO_ACCESS=false
+      - PASSWORD_ACCESS=false
+      - USER_NAME=direct1
+    volumes:
+      - /mnt/data/container_data/ssh/config:/config
+    ports:
+      - 192.0.2.0:2222:2222
+    restart: unless-stopped
+
+networks:
+  default:
+    external:
+      name: $DEFAULT_NETWORK

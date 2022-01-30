@@ -1,0 +1,12 @@
+services:
+  tor-alpine:
+    container_name: tor-alpine
+    build:
+      context: .
+      dockerfile: ../../podman/alpine/tor-alpine/Dockerfile
+    ports:
+      - "127.0.0.1:9050:9050"
+    restart: unless-stopped
+    volumes:
+      - /etc/localtime:/etc/localtime
+      - ${HOME}/tor:/var/lib/tor

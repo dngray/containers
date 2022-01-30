@@ -1,0 +1,18 @@
+ARG fedora_version=35
+#FROM registry.fedoraproject.org/fedora-toolbox:${fedora_version}
+FROM localhost/base:${fedora_version}
+
+ENV NAME=mail-fedora-toolbox VERSION=${fedora_version}
+LABEL com.github.containers.toolbox="true"                            \
+      name="$NAME"                                                    \
+      version="$VERSION"                                              \
+      usage="This image is meant to be used with the toolbox command" \
+      summary="Image includes Neomutt and various dependencies"
+
+COPY extra-packages /
+RUN dnf -y upgrade                        \
+    && dnf install -y dnf-plugins-core    \
+    && dnf copr enable -y flatcap/neomutt \
+    && dnf -y install $(<extra-packages)  \
+    && rm /extra-packages                 \
+    && dnf clean all

@@ -1,0 +1,31 @@
+services:
+  vpn_test:
+    extends:
+      file: ../docker-vpn/container-compose.yml
+      service: openvpn-client
+    container_name: vpn_test
+    hostname: vpn_test
+    volumes:
+      - /mnt/data/container_data/vpn:/data/vpn
+    ports:
+      - 8123:8123/tcp
+    environment:
+      - KILL_SWITCH=on
+      - SUBNETS=172.18.0.0/16
+      - VPN_CONFIG_FILE=UA1.ovpn.to.ovpn
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.test.tls=true"
+      - "traefik.http.routers.test.entrypoints=websecure"
+      - "traefik.http.routers.test.rule=Host(`test.$MY_DOMAIN`)"
+
+  test:
+    image: busybox
+    container_name: test
+    command: httpd -f -p 8123 -h /etc/
+    network_mode: service:vpn_test
+
+networks:
+  default:
+    external:
+      name: $DEFAULT_NETWORK

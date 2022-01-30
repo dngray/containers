@@ -1,0 +1,44 @@
+services:
+  bitwarden:
+    image: vaultwarden/server:latest
+    container_name: vaultwarden
+    expose:
+      - "80"
+      - "3012"
+    volumes:
+      - /mnt/data/container_data/bitwarden:/data
+    environment:
+      - WEBSOCKET_ENABLED=true
+      - WEB_VAULT_ENABLED=true
+      - ADMIN_TOKEN=${ADMIN_TOKEN}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.bitwarden.tls=true"
+      - "traefik.http.routers.bitwarden.entrypoints=websecure"
+      - "traefik.http.routers.bitwarden.rule=Host(`bitwarden.$MY_DOMAIN`)"
+    restart: on-failure
+
+  bw_backup:
+    image: bruceforce/bw_backup:latest
+    container_name: bw_backup
+    depends_on:
+      - bitwarden
+    volumes:
+      - /mnt/data/container_data/bitwarden:/data
+      - /mnt/data/container_data/bw_backups:/backup
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - DB_FILE=/data/db.sqlite3
+      - BACKUP_FILE=/backup/backup.sqlite3
+      - BACKUP_FILE_PERMISSIONS=700
+      - CRON_TIME=0 1 * * *
+      - TIMESTAMP=false
+      - UID=0
+      - GID=0
+    restart: on-failure
+
+networks:
+  default:
+    external:
+      name: $DEFAULT_NETWORK

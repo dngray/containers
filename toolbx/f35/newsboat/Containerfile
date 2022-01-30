@@ -1,0 +1,15 @@
+ARG fedora_version=35
+FROM registry.fedoraproject.org/fedora-toolbox:${fedora_version}
+
+ENV NAME=newsboat-fedora-toolbox VERSION=${fedora_version}
+LABEL com.github.containers.toolbox="true"                            \
+      name="$NAME"                                                    \
+      version="$VERSION"                                              \
+      usage="This image is meant to be used with the toolbox command" \
+      summary="Image includes newsboat"
+
+COPY extra-packages /
+RUN dnf -y upgrade                        \
+    && dnf -y install $(<extra-packages)  \
+    && rm /extra-packages                 \
+    && dnf clean all
