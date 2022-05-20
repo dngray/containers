@@ -23,8 +23,8 @@ newsboat:
 
 .PHONY: tor-alpine
 tor-alpine:
-	podman-compose -f compose/tor-alpine/container-compose.yml up -d
+	podman-compose -f compose/podman/tor-alpine/container-compose.yml up -d
 
 .PHONY: tor-socks-proxy
 tor-socks-proxy:
-	podman-compose -f compose/tor-socks-proxy/container-compose.yml up -d
+	podman-compose -f compose/podman/tor-socks-proxy/container-compose.yml up -d

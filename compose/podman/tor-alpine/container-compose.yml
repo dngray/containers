@@ -3,7 +3,7 @@ services:
     container_name: tor-alpine
     build:
       context: .
-      dockerfile: ../../podman/alpine/tor-alpine/Dockerfile
+      dockerfile: ../../../build/podman/alpine/tor-alpine/Containerfile
     ports:
       - "127.0.0.1:9050:9050"
     restart: unless-stopped
