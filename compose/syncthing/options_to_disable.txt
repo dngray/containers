@@ -1,0 +1,4 @@
+<globalAnnounceEnabled>false</globalAnnounceEnabled>
+<natEnabled>false</natEnabled>
+<relaysEnabled>false</relaysEnabled>
+<crashReportingEnabled>false</crashReportingEnabled>

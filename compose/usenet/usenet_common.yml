@@ -1,0 +1,11 @@
+services:
+  usenet_apps:
+    environment:
+      - PUID=1003
+      - PGID=1004
+      - TZ=${TZ}
+    volumes:
+      - /mnt/shared/usenet/watch:/mnt/shared/usenet/watch
+      - /mnt/shared/usenet/incoming:/mnt/shared/usenet/incoming
+      - /mnt/shared/usenet/completed:/mnt/shared/usenet/completed
+    restart: unless-stopped

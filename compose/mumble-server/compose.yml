@@ -1,0 +1,21 @@
+services:
+    mumble-server:
+        image: mumblevoip/mumble-server:latest
+        ports:
+          - 64738:64738
+          - 64738:64738/udp
+        container_name: murmur
+        hostname: mumble
+        volumes:
+          - /mnt/container_data/mumble:/data
+          - /mnt/container_data/mumble/certificates:/certificates:ro
+        environment:
+          MUMBLE_CONFIG_SSL_CERT: /certificates/mumble.${MY_DOMAIN}.crt
+          MUMBLE_CONFIG_SSL_KEY: /certificates/mumble.${MY_DOMAIN}.key
+          MUMBLE_SUPERUSER_PASSWORD: ${SUPER_PASS}
+          MUMBLE_CONFIG_SERVERPASSWORD: ${SERVER_PASS}
+          MUMBLE_CONFIG_USERS: 100
+          MUMBLE_CONFIG_USERSPERCHANNEL: 0
+          MUMBLE_CONFIG_WELCOMETEXT: "Welcome"
+          MUMBLE_CONFIG_ALLOWHTML: true
+        restart: on-failure

@@ -1,0 +1,31 @@
+services:
+  flexo:
+    image: nroi/flexo
+    container_name: flexo
+    ports:
+      - 9898:9898/tcp
+    volumes:
+      - type: bind
+        source: /mnt/container_data/flexo/latency_test_results.json
+        target: /var/cache/flexo/state/latency_test_results.json
+      - /mnt/shared/flexo:/var/cache/flexo/pkg
+    environment:
+      - FLEXO_MIRROR_SELECTION_METHOD=auto
+      - FLEXO_MIRRORS_AUTO_ALLOWED_COUNTRIES={{ .container_data.docker.cc }}
+      - FLEXO_MIRRORS_AUTO_MAX_SCORE=100
+      - FLEXO_MIRRORS_AUTO_TIMEOUT=1000
+      - FLEXO_PORT=9898
+      - FLEXO_CUSTOM_REPO=arm@http://mirror.archlinuxarm.org archzfs@https://archzfs.com
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.flexo.tls=true"
+      - "traefik.http.routers.flexo.tls.certresolver=stepca"
+      - "traefik.http.routers.flexo.rule=Host(`flexo.$MY_DOMAIN`)"
+      - "traefik.http.routers.flexo.entrypoints=websecure"
+      - "traefik.http.services.flexo.loadbalancer.server.port=9898"
+    restart: unless-stopped
+
+networks:
+  default:
+    external: true
+    name: ${DEFAULT_NETWORK}

@@ -1,0 +1,43 @@
+services:
+  vpn_bittorrent:
+    extends:
+      file: ../vpn/compose.yml
+      service: openvpn-client
+    container_name: vpn_bittorrent
+    volumes:
+      - /mnt/container_data/vpn:/data/vpn
+    ports:
+      - ${BTPORT}:${BTPORT}
+      - 8081:8081/tcp
+    environment:
+      - KILL_SWITCH=nftables
+      - VPN_CONFIG_FILE=${VPN}
+    restart: unless-stopped
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    network_mode: service:vpn_bittorrent
+    environment:
+      - PUID=1003
+      - PGID=1004
+      - TZ=${TZ}
+      - WEBUI_PORT=8081
+    volumes:
+      - /mnt/container_data/qbittorrent:/config
+      - /mnt/shared/incoming:/mnt/shared/incoming
+      - /mnt/shared/movies:/mnt/shared/movies
+      - /mnt/shared/tv:/mnt/shared/tv
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.qbittorrent.tls=true"
+      - "traefik.http.routers.qbittorrent.tls.certresolver=stepca"
+      - "traefik.http.routers.qbittorrent.rule=Host(`qbittorrent.$MY_DOMAIN`)"
+      - "traefik.http.routers.qbittorrent.entrypoints=websecure"
+      - "traefik.http.services.qbittorrent.loadbalancer.server.port=8081"
+    restart: unless-stopped
+
+networks:
+  default:
+    external: true
+    name: ${DEFAULT_NETWORK}

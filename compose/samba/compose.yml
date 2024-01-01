@@ -1,0 +1,14 @@
+services:
+  samba:
+    image: crazymax/samba
+    container_name: samba
+    network_mode: host
+    volumes:
+      - "/mnt/container_data/samba/data:/data"
+      - "/home/${USER1}:/samba/${USER1}"
+      - "/home/${USER2}:/samba/${USER2}"
+      - "/mnt/shared:/samba/shared"
+    environment:
+      - "TZ=${TZ}"
+      - "SAMBA_LOG_LEVEL=0"
+    restart: always

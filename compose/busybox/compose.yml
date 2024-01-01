@@ -1,0 +1,25 @@
+services:
+  vpn_test:
+    extends:
+      file: ../vpn/container-compose.yml
+      service: openvpn-client
+    container_name: vpn_test
+    volumes:
+      - /mnt/container_data/vpn:/data/vpn
+    ports:
+      - 8123:8123/tcp
+    environment:
+      - KILL_SWITCH=nftables
+      - VPN_CONFIG_FILE=${VPN}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.test.tls=true"
+      - "traefik.http.routers.test.entrypoints=websecure"
+      - "traefik.http.routers.test.rule=Host(`test.$MY_DOMAIN`)"
+      - "traefik.http.services.test.loadbalancer.server.port=8123"
+
+  test:
+    image: busybox
+    container_name: test
+    network_mode: service:vpn_test
+    command: httpd -f -p 8123 -h /etc/
