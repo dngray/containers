@@ -1,0 +1,18 @@
+http:
+  services:
+    flexo:
+      loadBalancer:
+        servers:
+          - url: http://172.26.0.2:9898
+
+  routers:
+    flexo-secure:
+      rule: Host(`flexo.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - secure-headers@file
+      tls:
+        certResolver: stepca
+      service: flexo@file

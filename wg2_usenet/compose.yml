@@ -1,0 +1,101 @@
+services:
+  wg2:
+    image: ghcr.io/wfg/wireguard
+    container_name: wg2
+    hostname: wg2
+    runtime: runc
+    restart: unless-stopped
+    cpus: 2
+    mem_limit: 4g
+    pids_limit: 1024
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - ALLOWED_SUBNETS=${NETWORK}/24
+    volumes:
+      - ${c_data}/wireguard/${WG}.conf:/etc/wireguard/wg0.conf
+    ports:
+      - 127.0.0.1:6767:6767/tcp
+      - 127.0.0.1:8989:8989/tcp
+      - 127.0.0.1:7878:7878/tcp
+      - 127.0.0.1:8686:8686/tcp
+      - 127.0.0.1:9696:9696/tcp
+    networks:
+      frontend:
+        ipv4_address: 172.21.0.2
+
+  sabnzbd:
+    extends:
+      file: usenet_common.yml
+      service: usenet_apps
+    image: lscr.io/linuxserver/sabnzbd:latest
+    container_name: sabnzbd
+    network_mode: service:wg2
+    volumes:
+      - ${c_data}/sabnzbd:/config
+      - /mnt/shared/usenet/watch:/mnt/shared/usenet/watch
+      - /mnt/shared/usenet/incoming:/mnt/shared/usenet/incoming
+      - /mnt/shared/usenet/completed:/mnt/shared/usenet/completed
+
+  sonarr:
+    extends:
+      file: usenet_common.yml
+      service: usenet_apps
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    network_mode: service:wg2
+    volumes:
+      - ${c_data}/sonarr:/config
+      - /mnt/shared/tv:/mnt/shared/tv
+      - /mnt/shared/usenet/watch:/mnt/shared/usenet/watch
+      - /mnt/shared/usenet/incoming:/mnt/shared/usenet/incoming
+      - /mnt/shared/usenet/completed:/mnt/shared/usenet/completed
+
+  radarr:
+    extends:
+      file: usenet_common.yml
+      service: usenet_apps
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    network_mode: service:wg2
+    volumes:
+      - ${c_data}/radarr:/config
+      - /mnt/shared/movies:/mnt/shared/movies
+      - /mnt/shared/usenet/watch:/mnt/shared/usenet/watch
+      - /mnt/shared/usenet/incoming:/mnt/shared/usenet/incoming
+      - /mnt/shared/usenet/completed:/mnt/shared/usenet/completed
+
+  lidarr:
+    extends:
+      file: usenet_common.yml
+      service: usenet_apps
+    image: lscr.io/linuxserver/lidarr:latest
+    container_name: lidarr
+    network_mode: service:wg2
+    volumes:
+      - ${c_data}/lidarr:/config
+      - /mnt/shared/music:/mnt/shared/music
+      - /mnt/shared/usenet/watch:/mnt/shared/usenet/watch
+      - /mnt/shared/usenet/incoming:/mnt/shared/usenet/incoming
+      - /mnt/shared/usenet/completed:/mnt/shared/usenet/completed
+
+  prowlarr:
+    extends:
+      file: usenet_common.yml
+      service: usenet_apps
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    network_mode: service:wg2
+    volumes:
+      - ${c_data}/prowlarr:/config
+
+networks:
+  frontend:
+    enable_ipv6: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.21.0.0/16
+        - subnet: fd21:1::/48

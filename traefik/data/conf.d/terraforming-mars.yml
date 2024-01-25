@@ -1,0 +1,18 @@
+http:
+  services:
+    terraforming-mars:
+      loadBalancer:
+        servers:
+          - url: http://172.31.0.2:8200
+
+  routers:
+    terraforming-mars-secure:
+      rule: Host(`terraforming-mars.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - secure-headers@file
+      tls:
+        certResolver: stepca
+      service: terraforming-mars@file
