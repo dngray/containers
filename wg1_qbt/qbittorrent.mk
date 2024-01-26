@@ -39,7 +39,6 @@ qbittorrent:
 		--security-opt=no-new-privileges \
 		--cap-drop=ALL \
 		--cap-add=CHOWN \
-		--cap-add=DAC_OVERRIDE \
 		--cap-add=DAC_READ_SEARCH \
 		--cap-add=SETGID \
 		--cap-add=SETUID \

@@ -22,3 +22,15 @@ http:
           X-XSS-Protection: "0"
         accesscontrolalloworiginlist:
           - https://grafana.{{ env "domain" }}
+
+    qbittorrent-secure-headers:
+      headers:
+        frameDeny: true
+        sslRedirect: true
+        browserXssFilter: false
+        contentTypeNosniff: true
+        customResponseHeaders:
+          X-Powered-By: ""
+          X-XSS-Protection: "0"
+        accesscontrolalloworiginlist:
+          - https://qbittorrent.{{ env "domain" }}

@@ -12,7 +12,7 @@ http:
         - https
       middlewares:
         - hsts-headers@file
-        - secure-headers@file
+        - qbittorrent-secure-headers@file
       tls:
         certResolver: stepca
       service: qbittorrent@file
