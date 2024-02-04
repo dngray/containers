@@ -48,6 +48,7 @@ COPY Root_CA.pem /usr/local/share/ca-certificates/Root_CA.crt
 RUN cat /usr/local/share/ca-certificates/Root_CA.crt >> /etc/ssl/certs/ca-certificates.crt && \
     apk --no-cache add \
       imapfilter@testing \
+			mailctl@testing \
       jq \
       gopass
 

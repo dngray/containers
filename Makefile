@@ -1,6 +1,9 @@
 MAKEFILE_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 # Local podman/toolbx containers
 include $(MAKEFILE_DIR)/aerc/aerc.mk
+include $(MAKEFILE_DIR)/mailctl/mailctl.mk
+include $(MAKEFILE_DIR)/pizauth/pizauth.mk
+include $(MAKEFILE_DIR)/davmail/davmail.mk
 include $(MAKEFILE_DIR)/imapfilter/imapfilter.mk
 include $(MAKEFILE_DIR)/dovecot/dovecot.mk
 include $(MAKEFILE_DIR)/proton-bridge/proton-bridge.mk
@@ -49,7 +52,7 @@ all-remove:
 
 .PHONY: all-up
 all-up: powerwall-run \
-  grafana-run \
+	grafana-run \
 	vault-run \
 	syncthing-run \
 	bt-run \

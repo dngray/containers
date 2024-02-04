@@ -17,5 +17,3 @@ services:
     environment:
       - PUID=1003
       - PGID=1003
-    depends_on:
-      - wg2

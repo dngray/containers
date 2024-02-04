@@ -39,6 +39,7 @@ RUN make -f Makefile.am log \
 
 FROM docker.io/alpine:latest
 ARG BUILD_DATE
+ARG UID
 LABEL name=aerc
 LABEL version="$IMAGE_VERSION"
 LABEL created="$BUILD_DATE"
@@ -49,7 +50,11 @@ ENV COLORTERM truecolor
 ENV GPG_TTY /dev/console
 ENV EDITOR nvim
 
-RUN adduser -D -s /bin/ash aerc
+EXPOSE 8080
+
+RUN adduser -D -s /bin/ash -u ${UID} aerc
+
+ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/aerc/.local/bin"
 
 RUN echo "@community https://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories
 
@@ -73,7 +78,21 @@ RUN apk add --no-cache \
   db \
   bash \
   neomutt \
-  fzf
+  fzf \
+  fd \
+  goimapnotify \
+  dante@community \
+  bat@community \
+  catimg \
+  poppler-utils \
+  jq
+
+RUN echo "@testing https://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
+
+RUN apk add --no-cache \
+  imapfilter@testing \
+  glow@testing \
+  catdoc@testing
 
 COPY --from=build /usr/local/bin/aerc /usr/local/bin/
 COPY --from=build /usr/local/share/aerc/ /usr/local/share/aerc/

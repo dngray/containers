@@ -4,17 +4,22 @@
 
 .PHONY: aerc-build
 aerc-build:
-	podman build -f build/aerc/Containerfile \
+	podman build -f aerc/Containerfile \
 		--build-arg BUILD_DATE=$(date -u) \
+		--build-arg UID=$(UID) \
 		-t aerc:latest
 
 .PHONY: aerc
 aerc:
 	podman run -it --replace --userns=keep-id \
+		--hostname aerc \
 		-v ~/.local/share/mail/:/home/aerc/.local/share/mail:z \
 		-v ~/.config/aerc:/home/aerc/.config/aerc:z,ro \
+		-v ~/.config/vdirsyncer/config:/home/aerc/.config/vdirsyncer/config:z,ro \
 		-v ~/.config/email-common/:/home/aerc/.config/email-common:z,ro \
 		-v ~/.config/nvim:/home/aerc/.config/nvim:z \
+		-v ~/.config/goimapnotify/goimapnotify.conf:/home/aerc/.config/goimapnotify/goimapnotify.conf:z,ro \
+		-v ~/.config/mailcap:/home/aerc/.config/mailcap:z,ro \
 		-v ~/.local/share/nvim:/home/aerc/.local/share/nvim:z \
 		-v ~/.local/share/address-book:/home/aerc/.local/share/address-book:z \
 		-v ~/.local/share/calendars:/home/aerc/.local/share/calendars:z \
@@ -28,9 +33,13 @@ aerc:
 		-v ~/.local/state/isync:/home/aerc/.local/state/isync:z \
 		-v ~/.config/gopass/:/home/aerc/.config/gopass/config:z,ro \
 		-v ~/.local/share/gopass/:/home/aerc/.local/share/gopass:z \
-		-v ~/.local/bin/msmtpq:/home/aerc/.local/bin/msmtpq:z \
+		-v ~/.local/bin/msmtp-queue:/home/aerc/.local/bin/msmtp-queue:z,ro \
+		-v ~/.local/bin/msmtpq:/home/aerc/.local/bin/msmtpq:z,ro \
+		-v ~/.local/bin/sm:/home/aerc/.local/bin/sm:z,ro \
 		-v ~/.config/mutt:/home/aerc/.config/mutt:z \
-		--mount type=bind,src=/run/user/${UID},dst=/run/user/${UID} \
+		-v ~/Downloads:/home/aerc/Downloads \
+		-v /run/user/${UID}:/run/user/${UID}:ro \
+		--security-opt label:disable \
 		--name aerc \
 		localhost/aerc
 
