@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=openjdk:8-jre-alpine
+ARG BASE_IMAGE=docker.io/openjdk:8-jre-alpine
 FROM docker.io/alpine:latest AS builder
 
 #trunk rev HEAD (may be unstable)
