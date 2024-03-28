@@ -4,6 +4,7 @@ include $(MAKEFILE_DIR)/aerc/aerc.mk
 include $(MAKEFILE_DIR)/mailctl/mailctl.mk
 include $(MAKEFILE_DIR)/pizauth/pizauth.mk
 include $(MAKEFILE_DIR)/davmail/davmail.mk
+include $(MAKEFILE_DIR)/hugo/hugo.mk
 include $(MAKEFILE_DIR)/imapfilter/imapfilter.mk
 include $(MAKEFILE_DIR)/dovecot/dovecot.mk
 include $(MAKEFILE_DIR)/proton-bridge/proton-bridge.mk
