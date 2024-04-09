@@ -26,9 +26,11 @@ pypowerwall:
 		--pids-limit=2048 \
 		--security-opt=no-new-privileges \
 		--cap-drop=all \
+		-e PW_AUTH_PATH=.auth \
+		-v ${c_data}/pypowerwall/.auth:/app/.auth \
 		--network=pypowerwall_backend --ip=172.28.0.2 \
 		--env-file ${PWD}/powerwall/data/pypowerwall.env \
-		docker.io/jasonacox/pypowerwall
+		docker.io/jasonacox/pypowerwall:0.7.12t44
 
 .PHONY: influxdb
 influxdb:
@@ -62,7 +64,7 @@ telegraf:
 		--cap-drop=all \
 		--user=1102:1102 \
 		-v ${PWD}/powerwall/data/telegraf.conf:/etc/telegraf/telegraf.conf:ro \
-		docker.io/telegraf
+		docker.io/telegraf:1.28.2
 
 .PHONY: telegraf-net-connect
 telegraf-net-connect:
