@@ -10,6 +10,7 @@ inputFiles:
   - /input/global.env.tmpl
   - /input/busybox/.env.tmpl
   - /input/flexo/flexo.env.tmpl
+  - /input/crowdin/.env.tmpl
   - /input/mumble-server/mumble.env.tmpl
   - /input/powerwall/data/pypowerwall.env.tmpl
   - /input/powerwall/data/telegraf.conf.tmpl
@@ -28,6 +29,7 @@ outputFiles:
   - /output/global.env
   - /output/busybox/.env
   - /output/flexo/flexo.env
+  - /output/crowdin/.env
   - /output/mumble-server/mumble.env
   - /output/powerwall/data/pypowerwall.env
   - /output/powerwall/data/telegraf.conf

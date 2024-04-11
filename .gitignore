@@ -1,8 +1,9 @@
-global.env
-container_data.json
 Root_CA.pem
 busybox/.env
+container_data.json
+crowdin/.env
 flexo/flexo.env
+global.env
 mumble-server/mumble.env
 powerwall/data/pypowerwall.env
 powerwall/data/telegraf.conf
