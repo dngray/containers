@@ -2,6 +2,7 @@ MAKEFILE_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 # Local podman/toolbx containers
 include $(MAKEFILE_DIR)/aerc/aerc.mk
 include $(MAKEFILE_DIR)/crowdin/crowdin.mk
+include $(MAKEFILE_DIR)/pg/pg.mk
 include $(MAKEFILE_DIR)/davmail/davmail.mk
 include $(MAKEFILE_DIR)/dovecot/dovecot.mk
 include $(MAKEFILE_DIR)/hugo/hugo.mk
