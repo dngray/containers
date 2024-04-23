@@ -7,6 +7,7 @@ aerc-build:
 	podman build -f aerc/Containerfile \
 		--build-arg BUILD_DATE=$(date -u) \
 		--build-arg UID=$(UID) \
+		--build-arg LANG=en_US.UTF-8 \
 		-t aerc:latest
 
 .PHONY: aerc
@@ -39,6 +40,7 @@ aerc:
 		-v ~/.config/mutt:/home/aerc/.config/mutt:z \
 		-v ~/Downloads:/home/aerc/Downloads \
 		-v /run/user/${UID}:/run/user/${UID}:ro \
+		-e TZ="" \
 		--security-opt label:disable \
 		--name aerc \
 		localhost/aerc

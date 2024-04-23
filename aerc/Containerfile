@@ -1,4 +1,4 @@
-FROM docker.io/golang:alpine AS build
+FROM docker.io/alpine:edge AS build
 
 ARG BUILD_DATE
 ARG NAME=aerc-build-env
@@ -19,7 +19,8 @@ RUN apk add --no-cache \
   openssl-dev \
   cyrus-sasl-dev \
   perl-timedate \
-  zlib-dev
+  zlib-dev \
+  go
 
 RUN git clone https://git.sr.ht/~sircmpwn/scdoc /opt/scdoc
 WORKDIR /opt/scdoc
@@ -37,9 +38,10 @@ RUN make -f Makefile.am log \
     && make \
     && make install
 
-FROM docker.io/alpine:latest
+FROM docker.io/alpine:edge
 ARG BUILD_DATE
 ARG UID
+ARG LANG
 LABEL name=aerc
 LABEL version="$IMAGE_VERSION"
 LABEL created="$BUILD_DATE"
@@ -49,6 +51,7 @@ ENV TERM xterm-256color
 ENV COLORTERM truecolor
 ENV GPG_TTY /dev/console
 ENV EDITOR nvim
+ENV LC_ALL ${LANG}
 
 EXPOSE 8080
 
@@ -85,7 +88,11 @@ RUN apk add --no-cache \
   bat@community \
   catimg \
   poppler-utils \
-  jq
+  jq \
+  musl \
+  musl-utils \
+  musl-locales \
+  tzdata
 
 RUN echo "@testing https://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
 
