@@ -1,0 +1,18 @@
+http:
+  services:
+    changedetection:
+      loadBalancer:
+        servers:
+          - url: http://172.30.0.2:8200
+
+  routers:
+    changedetection-secure:
+      rule: Host(`changedetection.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - secure-headers@file
+      tls:
+        certResolver: stepca
+      service: changedetection@file

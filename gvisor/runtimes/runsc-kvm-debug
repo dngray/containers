@@ -1,0 +1,5 @@
+#!/bin/sh
+
+runsc_path='/usr/bin/runsc'
+
+exec $runsc_path --platform=kvm --network=host --debug-log=/tmp/runsc-kvm/ --debug --strace "$@"

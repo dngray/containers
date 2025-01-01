@@ -1,0 +1,7 @@
+#!/bin/sh
+
+podman run -v ./:/data:Z \
+	-v ./:/input:Z \
+	-v ./:/output:Z \
+	docker.io/hairyhenderson/gomplate \
+	--config=/input/.gomplate.yaml -V

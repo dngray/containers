@@ -1,0 +1,23 @@
+# Maintainer: Daniel Gray <dngray@polarbear.army>
+pkgname=pizauth
+pkgver=1.0.4
+pkgrel=0
+pkgdesc="pizauth is a simple program for requesting, showing, and refreshing OAuth2 access tokens."
+url="https://tratt.net/laurie/src/pizauth"
+arch="all !armhf !armv7 !riscv64"
+license="MIT"
+makedepends="rust cargo make"
+subpackages="$pkgname-doc"
+source="https://tratt.net/laurie/src/pizauth/releases/$pkgname-$pkgver.tgz"
+
+build() {
+	make all
+}
+
+package() {
+	make PREFIX="/usr" DESTDIR="$pkgdir" install
+}
+
+sha512sums="
+f526e699b9b70332ee80c3416a9e00af18c08dd137da66cf76f1d1d4ca0acec5ae15cd028d556d231323c6f2fb5f07820c4cf86dd7df0d83d48056dd69ceacd4  pizauth-1.0.4.tgz
+"

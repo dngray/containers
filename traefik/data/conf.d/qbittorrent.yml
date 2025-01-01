@@ -1,0 +1,18 @@
+http:
+  services:
+    qbittorrent:
+      loadBalancer:
+        servers:
+          - url: http://172.20.0.2:8081
+
+  routers:
+    qbittorrent-secure:
+      rule: Host(`qbittorrent.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - qbittorrent-secure-headers@file
+      tls:
+        certResolver: stepca
+      service: qbittorrent@file
