@@ -1,0 +1,54 @@
+FROM docker.io/alpinelinux/build-base:latest AS build
+
+ARG BUILD_DATE
+ARG NAME=pizauth-build-env
+LABEL name="$NAME"
+LABEL version=latest
+LABEL created="$BUILD_DATE"
+
+RUN echo "@testing https://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
+RUN doas apk add --update --no-cache --no-progress \
+  cargo \
+  rust
+
+# setup directory to pass in build instructions files for abuild
+COPY --chown=buildozer:buildozer pizauth/* /home/buildozer/aports/testing/pizauth/
+WORKDIR /home/buildozer/aports/testing/pizauth
+
+# create keys for signing packages after the build has been finished
+RUN abuild-keygen -a -i -n
+
+# setup git for the build user
+RUN git config --global user.name 'Build User'
+RUN git config --global user.email 'build-user@example.com'
+
+# copy pizauth into dir
+RUN abuild -r
+
+FROM docker.io/alpine:latest
+
+ARG BUILD_DATE
+ARG IMAGE_VERSION
+ARG NAME=pizauth
+
+LABEL name=pizauth
+LABEL version="$IMAGE_VERSION"
+LABEL created="$BUILD_DATE"
+
+RUN apk --no-cache add \
+    mandoc \
+    gopass \
+    age
+
+COPY --from=build /home/buildozer/.abuild/*.pub /etc/apk/keys/
+COPY --from=build /home/buildozer/packages/testing/x86_64/*.apk /tmp
+RUN apk add /tmp/*.apk
+
+# setup the build user in container
+RUN adduser -D pizauth
+
+# make pizauth the current user in the image
+USER pizauth
+WORKDIR /home/pizauth
+
+CMD [ "/usr/bin/pizauth" ]

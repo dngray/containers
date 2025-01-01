@@ -1,0 +1,19 @@
+.PHONY: tests
+
+DAVMAIL_CALDAVPORT ?= 1080
+DAVMAIL_IMAPPORT   ?= 1143
+DAVMAIL_LDAPPORT   ?= 1389
+DAVMAIL_POPPORT    ?= 1110
+DAVMAIL_SMTPPORT   ?= 1025
+
+tests: ${TARGET_HOSTS}
+
+${TARGET_HOSTS}: prepare
+	echo 'GET / HTTP/1.1' | nc -vo - -w 5 $@ ${DAVMAIL_CALDAVPORT} | grep '^HTTP/1.1'
+	nc -vo - -w 5 $@ ${DAVMAIL_IMAPPORT} < /dev/null | grep '* OK '
+	nc -vo - -w 5 $@ ${DAVMAIL_LDAPPORT} < /dev/null
+	nc -vo - -w 5 $@ ${DAVMAIL_POPPORT} < /dev/null | grep '^+OK '
+	nc -vo - -w 5 $@ ${DAVMAIL_SMTPPORT} < /dev/null | grep '^220 '
+
+prepare:
+	sleep 2m

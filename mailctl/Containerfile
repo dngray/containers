@@ -1,0 +1,22 @@
+FROM docker.io/alpine:latest
+ARG BUILD_DATE
+ARG UID
+LABEL name=mailctl
+LABEL version="$IMAGE_VERSION"
+LABEL created="$BUILD_DATE"
+
+EXPOSE 8080
+
+RUN adduser -D -s /bin/ash -u ${UID} mailctl
+
+RUN echo "@testing https://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
+
+RUN apk add --no-cache \
+  gopass \
+  mailctl@testing
+
+COPY commands.sh /opt/commands.sh
+RUN ["chmod", "+x", "/opt/commands.sh"]
+
+ENTRYPOINT ["/opt/commands.sh"]
+#ENTRYPOINT ["tail", "-f", "/dev/null"]

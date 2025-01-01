@@ -1,0 +1,10 @@
+http:
+  middlewares:
+    hsts-headers:
+      headers:
+        forceSTSHeader: true
+        stsSeconds: 315360000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        customResponseHeaders:
+          Expect-CT: enforce, max-age=63072000

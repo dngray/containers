@@ -1,65 +1,68 @@
 MAKEFILE_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
-include $(MAKEFILE_DIR)/make/arr.mk
-include $(MAKEFILE_DIR)/make/serv.mk
-include $(MAKEFILE_DIR)/make/arr-compose.mk
-include $(MAKEFILE_DIR)/make/serv-compose.mk
-include $(MAKEFILE_DIR)/make/aerc.mk
-include $(MAKEFILE_DIR)/make/imapfilter.mk
+# Local podman/toolbx containers
+include $(MAKEFILE_DIR)/aerc/aerc.mk
+include $(MAKEFILE_DIR)/crowdin/crowdin.mk
+include $(MAKEFILE_DIR)/pg/pg.mk
+include $(MAKEFILE_DIR)/davmail/davmail.mk
+include $(MAKEFILE_DIR)/dovecot/dovecot.mk
+include $(MAKEFILE_DIR)/hugo/hugo.mk
+include $(MAKEFILE_DIR)/imapfilter/imapfilter.mk
+include $(MAKEFILE_DIR)/mailctl/mailctl.mk
+include $(MAKEFILE_DIR)/pizauth/pizauth.mk
+include $(MAKEFILE_DIR)/proton-bridge/proton-bridge.mk
+include $(MAKEFILE_DIR)/toolbx/toolbx.mk
+include $(MAKEFILE_DIR)/weechat/weechat.mk
+# Gvisor containers
+include $(MAKEFILE_DIR)/beets/beets.mk
+include $(MAKEFILE_DIR)/busybox/busybox.mk
+include $(MAKEFILE_DIR)/changedetection/changedetection.mk
+include $(MAKEFILE_DIR)/flexo/flexo.mk
+include $(MAKEFILE_DIR)/grafana/grafana.mk
+include $(MAKEFILE_DIR)/grocy/grocy.mk
+include $(MAKEFILE_DIR)/monero/monero.mk
+include $(MAKEFILE_DIR)/mumble-server/mumble-server.mk
+include $(MAKEFILE_DIR)/powerwall/powerwall.mk
+include $(MAKEFILE_DIR)/smb/samba.mk
+include $(MAKEFILE_DIR)/ssh/ssh.mk
+include $(MAKEFILE_DIR)/syncthing/syncthing.mk
+include $(MAKEFILE_DIR)/terraforming-mars/terraforming-mars.mk
+include $(MAKEFILE_DIR)/traefik/traefik.mk
+include $(MAKEFILE_DIR)/vault/vault.mk
+include $(MAKEFILE_DIR)/vaultwarden/vaultwarden.mk
+include $(MAKEFILE_DIR)/wg1_qbt/qbittorrent.mk
+include $(MAKEFILE_DIR)/wg2_usenet/usenet.mk
+include $(MAKEFILE_DIR)/wg3_general/wg3_general.mk
+include $(MAKEFILE_DIR)/wg_test/wg_test.mk
+include $(MAKEFILE_DIR)/whoami/whoami.mk
+
+include global.env
 
 SHELL=/bin/sh
 UID := $(shell id -u)
 
 list:
-	docker ps -all
-	docker images
-	docker network ls
-
-template:
-	podman run -v ./:/data:Z \
-		-v ./:/input:Z \
-		-v ./:/output:Z \
-		docker.io/hairyhenderson/gomplate \
-		--config=/input/.gomplate.yaml -V
-
-network: 
-	sudo docker network create --subnet=172.18.0.0/16 \
-		-d bridge \
-		-o com.docker.network.bridge.name=traefik-proxy \
-		traefik-proxy
-
-all-build: compose-serv-build
-
-all-clean: all-arr-clean all-serv-clean
-	sudo docker system prune -f
 	sudo docker ps -all
 	sudo docker images
+	sudo docker network ls
 
-all-up: compose-arr-up compose-serv-up
+.PHONY: all-stop
+all-down:
+	sudo docker stop $(sudo docker ps -aq)
 
-all-down: compose-arr-down compose-serv-down
+.PHONY: all-remove
+all-remove:
+	sudo docker rm $(sudo docker ps -aq)
 
-#FEDORA_VERSION ?=  $(shell cat /etc/os-release | grep VERSION_ID | awk -F '=' '{ print $$2 }')
-FEDORA_VERSION ?= 39
-ARGS =
-
-.PHONY: base
-base:
-	podman build $(ARGS) \
-	--pull=true \
-	--build-arg="fedora_version=$(FEDORA_VERSION)" -t base:$(FEDORA_VERSION) toolbx/f$(FEDORA_VERSION)/base/
-
-.PHONY: mpv
-mpv:
-	podman build $(ARGS) --build-arg=fedora_version=$(FEDORA_VERSION) -t mpv:$(FEDORA_VERSION) toolbx/f$(FEDORA_VERSION)/mpv/
-
-.PHONY: newsboat
-newsboat:
-	podman build $(ARGS) --build-arg=fedora_version=$(FEDORA_VERSION) -t newsboat:$(FEDORA_VERSION) toolbx/f$(FEDORA_VERSION)/newsboat/
-
-.PHONY: tor-alpine
-tor-alpine:
-	podman-compose -f compose/podman/tor-alpine/container-compose.yml up -d
-
-.PHONY: tor-socks-proxy
-tor-socks-proxy:
-	podman-compose -f compose/podman/tor-socks-proxy/container-compose.yml up -d
+.PHONY: all-up
+all-up: powerwall-run \
+	grafana-run \
+	vault-run \
+	syncthing-run \
+	bt-run \
+	samba \
+	flexo-run \
+	wg2-up \
+	wg3-up \
+	vaultwarden-up \
+	beets-up \
+	traefik-run

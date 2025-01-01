@@ -1,0 +1,35 @@
+services:
+  davmail:
+    image: ${IMAGE_NAME:-kran0/davmail-docker:latest}
+    volumes:
+       - davmail-config:/davmail-config # To save persistent conf data
+#    build:
+#      context: .
+#      dockerfile: Dockerfile
+
+# The env setting documentation: http://davmail.sourceforge.net/serversetup.html
+# Vars captions are the same, but the names must be provided in BASH_FORMAT
+# E.g. in UPPERCASE and with "_" instead of the dots as WORD_DELIMITER
+# Please watch more examples in tests/compose-sut.yaml
+    environment:
+      - DAVMAIL_SERVER=true
+      - DAVMAIL_ALLOWREMOTE=true
+      - DAVMAIL_DISABLEUPDATECHECK=true
+      - DAVMAIL_LOGFILEPATH=/dev/stdout
+      - DAVMAIL_CALDAVPORT=1080
+      - DAVMAIL_IMAPPORT=1143
+      - DAVMAIL_LDAPPORT=1389
+      - DAVMAIL_POPPORT=1110
+      - DAVMAIL_SMTPPORT=1025
+      - JAVA_OPTS=-Xmx512M -Dsun.net.inetaddr.ttl=30
+#      - DISABLE_DAVMAIL_PROPERTIES_PERSISTENCE=true
+    ports:
+      - 1080:1080
+      - 1143:1143
+      - 1389:1389
+      - 1110:1110
+      - 1025:1025
+    restart: on-failure
+
+volumes:
+  davmail-config:

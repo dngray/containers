@@ -1,0 +1,88 @@
+#
+# syncthing
+#
+
+.PHONY: syncthing1-net-create
+syncthing1-net-create:
+	sudo docker network create --subnet=172.24.0.0/16 \
+	--ipv6 --subnet fd24:1::/48 \
+	syncthing1_frontend
+
+.PHONY: syncthing2-net-create
+syncthing2-net-create:
+	sudo docker network create --subnet=172.25.0.0/16 \
+	--ipv6 --subnet fd25:2::/48 \
+	syncthing2_frontend
+
+.PHONY: syncthing1
+syncthing1:
+	sudo docker run -d \
+		--name syncthing1 \
+		--restart=unless-stopped \
+		--runtime=runsc-kvm \
+		--memory=8g \
+		--pids-limit=2048 \
+		--security-opt=no-new-privileges \
+		--cap-drop=all \
+		--cap-add=CHOWN \
+		--cap-add=DAC_READ_SEARCH \
+		--cap-add=SETGID \
+		--cap-add=SETUID \
+		--cap-add=SYS_NICE \
+		-p 127.0.0.1:8384:8384 \
+		-p 22000:22000 \
+		--network=syncthing1_frontend --ip=172.24.0.2 \
+		-e PUID=1000 \
+		-e PGID=1000 \
+		-v /home/${u1}/.config/syncthing/:/config \
+{{- range $paths := index .container_data.docker.syncthing.instance_1.paths }}
+		-v {{ . }} \
+{{- end }}
+		lscr.io/linuxserver/syncthing:latest
+
+.PHONY: syncthing2
+syncthing2:
+	sudo docker run -d \
+		--name syncthing2 \
+		--runtime=runsc-kvm \
+		--restart=unless-stopped \
+		--memory=8g \
+		--pids-limit=2048 \
+		--security-opt=no-new-privileges \
+		--cap-drop=all \
+		--cap-add=CHOWN \
+		--cap-add=DAC_READ_SEARCH \
+		--cap-add=SETGID \
+		--cap-add=SETUID \
+		--cap-add=SYS_NICE \
+		-p 127.0.0.1:8385:8384 \
+		-p 22001:22000 \
+		--network=syncthing2_frontend --ip=172.25.0.2 \
+		-e PUID=1001 \
+		-e PGID=1001 \
+		-v /home/${u2}/.config/syncthing/:/config \
+{{- range $paths := index .container_data.docker.syncthing.instance_2.paths }}
+		-v {{ . }} \
+{{- end }}
+		lscr.io/linuxserver/syncthing:latest
+
+.PHONY: syncthing-run
+syncthing-run: syncthing1-net-create \
+	syncthing2-net-create \
+	syncthing1 \
+	syncthing2
+
+.PHONY: syncthing1-clean
+syncthing1-clean:
+	sudo docker stop syncthing1
+	sudo docker network rm syncthing1_frontend
+	sudo docker rm syncthing1
+
+.PHONY: syncthing2-clean
+syncthing2-clean:
+	sudo docker stop syncthing2
+	sudo docker network rm syncthing2_frontend
+	sudo docker rm syncthing2
+
+.PHONY: syncthing-clean
+syncthing-clean: syncthing1-clean syncthing2-clean

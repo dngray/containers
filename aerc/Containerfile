@@ -1,0 +1,119 @@
+FROM docker.io/alpine:edge AS build
+
+ARG BUILD_DATE
+ARG NAME=aerc-build-env
+LABEL name="$NAME"
+LABEL version=latest
+LABEL created="$BUILD_DATE"
+MAINTAINER "dngray"
+
+RUN apk add --no-cache \
+  man-db \
+  git \
+  build-base \
+  notmuch-dev \
+  automake \
+  autoconf \
+  perl \
+  db-dev \
+  openssl-dev \
+  cyrus-sasl-dev \
+  perl-timedate \
+  zlib-dev \
+  go
+
+RUN git clone https://git.sr.ht/~sircmpwn/scdoc /opt/scdoc
+WORKDIR /opt/scdoc
+RUN make && make install
+
+RUN git clone https://git.sr.ht/~rjarry/aerc /opt/aerc
+WORKDIR /opt/aerc
+RUN make && make install
+
+RUN git clone https://git.code.sf.net/p/isync/isync /opt/isync
+WORKDIR /opt/isync
+RUN make -f Makefile.am log \
+    && autoreconf -f -i \
+    && ./configure \
+    && make \
+    && make install
+
+FROM docker.io/alpine:edge
+ARG BUILD_DATE
+ARG UID
+ARG LANG
+LABEL name=aerc
+LABEL version="$IMAGE_VERSION"
+LABEL created="$BUILD_DATE"
+MAINTAINER "dngray"
+
+ENV TERM xterm-256color
+ENV COLORTERM truecolor
+ENV GPG_TTY /dev/console
+ENV EDITOR nvim
+ENV LC_ALL ${LANG}
+
+EXPOSE 8080
+
+RUN adduser -D -s /bin/ash -u ${UID} aerc
+
+ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/aerc/.local/bin"
+
+RUN echo "@community https://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories
+
+RUN apk add --no-cache \
+  less \
+  mandoc \
+  git \
+  ca-certificates \
+  neovim \
+  w3m \
+  gopass \
+  khard@community \
+  vdirsyncer \
+  notmuch \
+  ncurses \
+  lua \
+  build-base \
+  ripgrep \
+  pandoc \
+  msmtp \
+  db \
+  bash \
+  neomutt \
+  fzf \
+  fd \
+  goimapnotify \
+  dante@community \
+  bat@community \
+  catimg \
+  poppler-utils \
+  jq \
+  musl \
+  musl-utils \
+  musl-locales \
+  tzdata
+
+RUN echo "@testing https://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
+
+RUN apk add --no-cache \
+  imapfilter@testing \
+  glow@testing \
+  catdoc@testing
+
+COPY --from=build /usr/local/bin/aerc /usr/local/bin/
+COPY --from=build /usr/local/share/aerc/ /usr/local/share/aerc/
+COPY --from=build /usr/local/libexec/aerc/ /usr/local/libexec/aerc/
+COPY --from=build /usr/local/bin/mbsync /usr/bin/mbsync
+COPY --from=build /usr/local/bin/mbsync-get-cert /usr/bin/mbsync-get-cert
+COPY --from=build /usr/local/bin/mdconvert /usr/bin/mdconvert
+COPY --from=build /usr/local/share/man/man1/aerc* /usr/local/share/man/man1/
+COPY --from=build /usr/local/share/man/man5/aerc* /usr/local/share/man/man5/
+COPY --from=build /usr/local/share/man/man7/aerc* /usr/local/share/man/man7/
+
+RUN ln -s /usr/bin/pinentry* /usr/local/bin/
+
+USER aerc
+WORKDIR /home/aerc
+
+ENTRYPOINT ["/usr/local/bin/aerc"]

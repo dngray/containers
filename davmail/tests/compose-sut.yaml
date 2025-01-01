@@ -1,0 +1,103 @@
+services:
+  sut:
+    depends_on:
+      - davmail-textconfig
+      - davmail-envconfig
+      - davmail # used to test main ./docker-compose.yaml
+    build:
+      context: .
+      dockerfile: Dockerfile-sut
+      args:
+        ALPINE_VERSION: latest
+    environment:
+      - TARGET_HOSTS=davmail-textconfig davmail-envconfig davmail
+# Listener ports
+      - DAVMAIL_CALDAVPORT=1080
+      - DAVMAIL_IMAPPORT=1143
+      - DAVMAIL_LDAPPORT=1389
+      - DAVMAIL_POPPORT=1110
+      - DAVMAIL_SMTPPORT=1025
+    command: tests
+
+
+# Case1: old-fasion text config
+  davmail-textconfig:
+    cap_drop:           # for test usage only, do not copy this line
+      - ALL             # for test usage only, do not copy this line
+    image: ${IMAGE_NAME}
+    volumes:
+      - ./davmail.properties.example:/davmail/davmail.properties
+    command: /davmail/davmail.properties
+
+
+# Case2: environment-based configuration
+  davmail-envconfig:
+    cap_drop:           # for test usage only, do not copy this line
+      - ALL             # for test usage only, do not copy this line
+    image: ${IMAGE_NAME}
+    environment:
+      - JAVA_OPTS=-Xmx127M -Dsun.net.inetaddr.ttl=10
+
+# Server or workstation mode
+      - DAVMAIL_SERVER=true
+      - DAVMAIL_MODE=EWS
+      - DAVMAIL_URL=https://outlook.office365.com/EWS/Exchange.asmx
+
+# Listener ports
+      - DAVMAIL_CALDAVPORT=1080
+      - DAVMAIL_IMAPPORT=1143
+      - DAVMAIL_LDAPPORT=1389
+      - DAVMAIL_POPPORT=1110
+      - DAVMAIL_SMTPPORT=1025
+
+# Network proxy settings
+      - DAVMAIL_ENABLEPROXY=false
+      - DAVMAIL_USESYSTEMPROXIES=false
+      - DAVMAIL_PROXYHOST=
+      - DAVMAIL_PROXYPORT=
+      - DAVMAIL_PROXYUSER=
+      - DAVMAIL_PROXYPASSWORD=
+
+# proxy exclude list
+      - DAVMAIL_NOPROXYFOR=
+
+# allow remote connection to DavMail
+      - DAVMAIL_ALLOWREMOTE=true
+# bind server sockets to a specific address
+      - DAVMAIL_BINDADDRESS=
+# client connections SO timeout in seconds
+      - DAVMAIL_CLIENTSOTIMEOUT=
+
+# DavMail listeners SSL configuration
+      - DAVMAIL_SSL_KEYSTORETYPE=
+      - DAVMAIL_SSL_KEYSTOREFILE=
+      - DAVMAIL_SSL_KEYSTOREPASS=
+      - DAVMAIL_SSL_KEYPASS=
+
+      - DAVMAIL_OAUTH_TOKENFILEPATH=
+      - DAVMAIL_OAUTH_PERSISTTOKEN=
+      - DAVMAIL_OAUTH_CLIENTID=d3590ed6-52b3-4102-aeff-aad2292ab01c
+      - DAVMAIL_OAUTH_REDIRECTURI=urn:ietf:wg:oauth:2.0:oob
+
+# Accept specified certificate even if invalid according to trust store
+      - DAVMAIL_SERVER_CERTIFICATE_HASH=
+
+# disable SSL for specified listeners
+      - DAVMAIL_SSL_NOSECURECALDAV=false
+      - DAVMAIL_SSL_NOSECUREIMAP=false
+      - DAVMAIL_SSL_NOSECURELDAP=false
+      - DAVMAIL_SSL_NOSECUREPOP=false
+      - DAVMAIL_SSL_NOSECURESMTP=false
+
+# disable update check
+      - DAVMAIL_DISABLEUPDATECHECK=true
+
+# Send keepalive character during large folder and messages download
+      - DAVMAIL_ENABLEKEEPALIVE=false
+# Message count limit on folder retrieval
+      - DAVMAIL_FOLDERSIZELIMIT=0
+# Default windows domain for NTLM and basic authentication
+      - DAVMAIL_DEFAULTDOMAIN=
+
+# log file path, leave empty for default path
+      - DAVMAIL_LOGFILEPATH=/dev/stdout
