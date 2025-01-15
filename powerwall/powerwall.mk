@@ -30,7 +30,7 @@ pypowerwall:
 		-v ${c_data}/pypowerwall/.auth:/app/.auth \
 		--network=pypowerwall_backend --ip=172.28.0.2 \
 		--env-file ${PWD}/powerwall/data/pypowerwall.env \
-		docker.io/jasonacox/pypowerwall:0.7.12t44
+		docker.io/jasonacox/pypowerwall:0.12.0t66
 
 .PHONY: influxdb
 influxdb:
