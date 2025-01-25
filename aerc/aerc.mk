@@ -19,7 +19,7 @@ aerc:
 		-v ~/.config/vdirsyncer/config:/home/aerc/.config/vdirsyncer/config:z,ro \
 		-v ~/.config/email-common/:/home/aerc/.config/email-common:z,ro \
 		-v ~/.config/nvim:/home/aerc/.config/nvim:z \
-		-v ~/.config/goimapnotify/goimapnotify.conf:/home/aerc/.config/goimapnotify/goimapnotify.conf:z,ro \
+		-v ~/.config/goimapnotify/goimapnotify.yaml:/home/aerc/.config/goimapnotify/goimapnotify.yaml:z,ro \
 		-v ~/.config/mailcap:/home/aerc/.config/mailcap:z,ro \
 		-v ~/.local/share/nvim:/home/aerc/.local/share/nvim:z \
 		-v ~/.local/share/address-book:/home/aerc/.local/share/address-book:z \
