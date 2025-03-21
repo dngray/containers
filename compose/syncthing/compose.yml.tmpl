@@ -1,0 +1,57 @@
+name: syncthing
+services:
+  syncthing1:
+    extends:
+      file: syncthing_common.yml
+      service: syncthing_apps
+    image: lscr.io/linuxserver/syncthing:latest
+    container_name: syncthing1
+    environment:
+      - PUID=1000
+      - PGID=1000
+    volumes:
+      - /home/${U1}/.config/syncthing/:/config
+{{- range $paths := index .container_data.docker.syncthing.instance_1.paths }}
+      - {{ . }}
+{{- end }}
+    ports:
+      - 127.0.0.1:8384:8384
+      - 22000:22000
+    networks:
+      1_frontend:
+        ipv4_address: 172.24.0.2
+
+  syncthing2:
+    extends:
+      file: syncthing_common.yml
+      service: syncthing_apps
+    image: lscr.io/linuxserver/syncthing:latest
+    container_name: syncthing2
+    environment:
+      - PUID=1001
+      - PGID=1001
+    volumes:
+      - /home/${U2}/.config/syncthing/:/config
+{{- range $paths := index .container_data.docker.syncthing.instance_2.paths }}
+      - {{ . }}
+{{- end }}
+    ports:
+      - 127.0.0.1:8385:8384
+      - 22001:22000
+    networks:
+      2_frontend:
+        ipv4_address: 172.25.0.2
+
+networks:
+  1_frontend:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 172.24.0.0/16
+        - subnet: fd24:1::/48
+  2_frontend:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
+        - subnet: fd25:1::/48

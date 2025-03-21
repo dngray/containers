@@ -1,0 +1,80 @@
+name: powerwall
+services:
+  influxdb:
+    extends:
+      file: powerwall_common.yml
+      service: powerwall_apps
+    image: docker.io/influxdb:1.8
+    container_name: influxdb
+    hostname: influxdb
+    volumes:
+      - ./data/influxdb.conf:/etc/influxdb/influxdb.conf:ro
+      - /opt/appdata/influxdb:/var/lib/influxdb
+    user: "${PWD_USER:-1000:1000}"
+    networks:
+      influxdb_backend:
+        ipv4_address: 172.29.0.2
+
+  pypowerwall:
+    extends:
+      file: powerwall_common.yml
+      service: powerwall_apps
+    image: docker.io/jasonacox/pypowerwall:0.12.7t68
+    container_name: pypowerwall
+    hostname: pypowerwall
+    environment:
+      - PW_AUTH_PATH=/app/.auth
+    volumes:
+      - /opt/appdata/pypowerwall/.auth:/app/.auth
+    env_file: ./data/pypowerwall.env
+    networks:
+      pypowerwall_backend:
+        ipv4_address: 172.28.0.2
+
+  telegraf:
+    extends:
+      file: powerwall_common.yml
+      service: powerwall_apps
+    image: docker.io/telegraf:1.28.2
+    container_name: telegraf
+    hostname: telegraf
+    volumes:
+      - ./data/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    networks:
+      - influxdb_backend
+      - pypowerwall_backend
+    user: "${PWD_USER:-1000:1000}"
+    depends_on:
+      - influxdb
+      - pypowerwall
+
+  weather:
+    extends:
+      file: powerwall_common.yml
+      service: powerwall_apps
+    image: docker.io/jasonacox/weather411
+    container_name: weather411
+    hostname: weather411
+    environment:
+      - WEATHERCONF=/var/lib/weather/weather411.conf
+    volumes:
+      - ./data/weather411.conf:/var/lib/weather/weather411.conf:ro
+    networks:
+      - influxdb_backend
+    user: "${PWD_USER:-1000:1000}"
+    depends_on:
+      - influxdb
+
+networks:
+   pypowerwall_backend:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+        - subnet: fd28:2::/48
+   influxdb_backend:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 172.29.0.0/16
+        - subnet: fd29:1::/48

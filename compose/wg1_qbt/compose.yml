@@ -1,0 +1,60 @@
+name: wg1_qbt
+services:
+  wg1:
+    image: ghcr.io/wfg/wireguard
+    container_name: wg1
+    hostname: wg1
+    runtime: runc
+    restart: unless-stopped
+    cpus: 4
+    mem_limit: 8g
+    pids_limit: 2048
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - ALLOWED_SUBNETS=${NETWORK}/24
+    volumes:
+      - /opt/appdata/wireguard/${WG1}.conf:/etc/wireguard/wg0.conf
+    ports:
+      - 127.0.0.1:8081:8081
+    networks:
+      frontend:
+        ipv4_address: 172.20.0.2
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent
+    container_name: qbittorrent
+    network_mode: service:wg1
+    runtime: runsc-kvm
+    restart: unless-stopped
+    cpus: 2
+    mem_limit: 4g
+    pids_limit: 1024
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_READ_SEARCH
+      - SETUID
+      - SETGID
+    environment:
+      - PUID=1003
+      - PGID=1003
+      - WEBUI_PORT=8081
+    volumes:
+      - /opt/appdata/qbittorrent:/config
+      - /mnt/shared/incoming:/mnt/shared/incoming
+      - /mnt/shared/movies:/mnt/shared/movies
+      - /mnt/shared/tv:/mnt/shared/tv
+
+networks:
+  frontend:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+        - subnet: fd20:1::/48

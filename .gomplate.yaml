@@ -7,39 +7,33 @@ context:
     url: /data/container_data.json
 
 inputFiles:
-  - /input/global.env.tmpl
-  - /input/busybox/.env.tmpl
-  - /input/flexo/flexo.env.tmpl
-  - /input/crowdin/.env.tmpl
-  - /input/mumble-server/mumble.env.tmpl
-  - /input/powerwall/data/pypowerwall.env.tmpl
-  - /input/powerwall/data/telegraf.conf.tmpl
-  - /input/powerwall/data/weather411.conf.tmpl
-  - /input/smb/config.yml.tmpl
-  - /input/syncthing/syncthing.mk.tmpl
-  - /input/traefik/data/traefik.env.tmpl
-  - /input/traefik/data/traefik.yml.tmpl
-  - /input/vaultwarden/.env.tmpl
-  - /input/wg1_qbt/.env.tmpl
-  - /input/wg2_usenet/.env.tmpl
-  - /input/wg3_general/.env.tmpl
-  - /input/wg_test/.env.tmpl
+  - /input/compose/.env.tmpl
+  - /input/compose/flexo/flexo.env.tmpl
+  - /input/compose/powerwall/data/pypowerwall.env.tmpl
+  - /input/compose/powerwall/data/telegraf.conf.tmpl
+  - /input/compose/powerwall/data/weather411.conf.tmpl
+  - /input/compose/smb/config.yml.tmpl
+  - /input/compose/syncthing/compose.yml.tmpl
+  - /input/compose/traefik/data/traefik.env.tmpl
+  - /input/compose/traefik/data/traefik.yml.tmpl
+  - /input/compose/vaultwarden/vault.env.tmpl
+  - /input/quadlets/crowdin/.env.tmpl
+  - /input/old/busybox/.env.tmpl
+  - /input/old/mumble-server/mumble.env.tmpl
+  - /input/old/wg_test/.env.tmpl
 
 outputFiles:
-  - /output/global.env
-  - /output/busybox/.env
-  - /output/flexo/flexo.env
-  - /output/crowdin/.env
-  - /output/mumble-server/mumble.env
-  - /output/powerwall/data/pypowerwall.env
-  - /output/powerwall/data/telegraf.conf
-  - /output/powerwall/data/weather411.conf
-  - /output/smb/config.yml
-  - /output/syncthing/syncthing.mk
-  - /output/traefik/data/traefik.env
-  - /output/traefik/data/traefik.yml
-  - /output/vaultwarden/.env
-  - /output/wg1_qbt/.env
-  - /output/wg2_usenet/.env
-  - /output/wg3_general/.env
-  - /output/wg_test/.env
+  - /output/compose/.env
+  - /output/compose/flexo/flexo.env
+  - /output/compose/powerwall/data/pypowerwall.env
+  - /output/compose/powerwall/data/telegraf.conf
+  - /output/compose/powerwall/data/weather411.conf
+  - /output/compose/smb/config.yml
+  - /output/compose/syncthing/compose.yml
+  - /output/compose/traefik/data/traefik.env
+  - /output/compose/traefik/data/traefik.yml
+  - /output/compose/vaultwarden/vault.env
+  - /output/quadlets/crowdin/.env
+  - /output/old/busybox/.env
+  - /output/old/mumble-server/mumble.env
+  - /output/old/wg_test/.env
