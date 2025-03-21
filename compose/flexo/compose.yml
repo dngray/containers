@@ -1,0 +1,33 @@
+name: flexo
+services:
+  flexo:
+    image: docker.io/nroi/flexo
+    container_name: flexo
+    runtime: runsc-kvm
+    restart: unless-stopped
+    user: 2001:2001
+    cpus: 2
+    mem_limit: 8g
+    pids_limit: 2048
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - /opt/appdata/flexo/latency_test_results.json:/var/cache/flexo/state/latency_test_results.json
+      - /mnt/shared/flexo:/var/cache/flexo/pkg
+    ports:
+      - 9898:9898/tcp
+    env_file: flexo.env
+    networks:
+      frontend:
+        ipv4_address: 172.26.0.2
+
+networks:
+  frontend:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 172.26.0.0/16
+        - subnet: fd26:1::/48

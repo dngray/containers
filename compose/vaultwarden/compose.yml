@@ -1,0 +1,26 @@
+name: vaultwarden
+services:
+  vaultwarden:
+    image: docker.io/vaultwarden/server:latest
+    container_name: bitwarden
+    network_mode: container:wg3
+    runtime: runsc-kvm
+    restart: unless-stopped
+    user: 1003:1003
+    cpus: 2
+    mem_limit: 4g
+    pids_limit: 512
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+    environment:
+      - WEBSOCKET_ENABLED=true
+      - WEB_VAULT_ENABLED=true
+      - ROCKET_PORT=8558
+    env_file: vault.env
+    volumes:
+      - /opt/appdata/vaultwarden:/data

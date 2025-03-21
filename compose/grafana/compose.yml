@@ -1,0 +1,41 @@
+name: grafana
+services:
+  grafana:
+    image: docker.io/grafana/grafana:9.1.2-ubuntu
+    container_name: grafana
+    hostname: grafana
+    runtime: runsc-kvm
+    restart: unless-stopped
+    cpus: 2
+    mem_limit: 1g
+    pids_limit: 512
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    user: 2003:2003
+    env_file: grafana.env
+    volumes:
+      - /opt/appdata/grafana/:/var/lib/grafana
+    # depends_on:
+    #   - influxdb
+    networks:
+      frontend:
+        ipv4_address: 172.27.0.2
+      powerwall_pypowerwall_backend:
+      powerwall_influxdb_backend:
+
+networks:
+  frontend:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 172.27.0.0/16
+        - subnet: fd27:1::/48
+  powerwall_pypowerwall_backend:
+    name: powerwall_pypowerwall_backend
+    external: true
+  powerwall_influxdb_backend:
+    name: powerwall_influxdb_backend
+    external: true
