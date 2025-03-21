@@ -1,0 +1,76 @@
+name: traefik
+services:
+  traefik:
+    build:
+      context: /srv/containers/build/traefik
+      dockerfile: Dockerfile
+    container_name: traefik
+    image: localhost/traefik
+    # image: dockerhub.io/traefik
+    hostname: traefik
+    runtime: runsc-kvm
+    restart: unless-stopped
+    read_only: true
+    mem_limit: 8g
+    pids_limit: 2048
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    user: 1003:1003
+    ports:
+      - 8675:8675
+      - 80:8080
+      - 443:4430
+      - 443:4430/udp
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=http_network
+    volumes:
+      - ./data/traefik.yml:/etc/traefik/traefik.yml
+      - ./data/conf.d:/etc/traefik/conf.d:ro
+      - /opt/appdata/traefik/acme.json:/etc/acme/acme.json:rw
+      - /opt/appdata/traefik/certs:/etc/traefik/certs:ro
+    env_file: ./data/traefik.env
+    environment:
+      - LEGO_CA_CERTIFICATES=/etc/traefik/certs/root.crt
+      - domain=${DOMAIN}
+    networks:
+      - wg1_qbt_frontend
+      - wg2_usenet_frontend
+      - wg3_general_frontend
+      - syncthing_1_frontend
+      - syncthing_2_frontend
+      - flexo_frontend
+      - powerwall_pypowerwall_backend
+      - grafana_frontend
+      - vault_frontend
+
+networks:
+  wg1_qbt_frontend:
+    name: wg1_qbt_frontend
+    external: true
+  wg2_usenet_frontend:
+    name: wg2_usenet_frontend
+    external: true
+  wg3_general_frontend:
+    name: wg3_general_frontend
+    external: true
+  syncthing_1_frontend:
+    name: syncthing_1_frontend
+    external: true
+  syncthing_2_frontend:
+    name: syncthing_2_frontend
+    external: true
+  flexo_frontend:
+    name: flexo_frontend
+    external: true
+  powerwall_pypowerwall_backend:
+    name: powerwall_pypowerwall_backend
+    external: true
+  grafana_frontend:
+    name: grafana_frontend
+    external: true
+  vault_frontend:
+    name: vault_frontend
+    external: true

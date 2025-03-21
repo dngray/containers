@@ -1,68 +1,36 @@
-MAKEFILE_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
-# Local podman/toolbx containers
-include $(MAKEFILE_DIR)/aerc/aerc.mk
-include $(MAKEFILE_DIR)/crowdin/crowdin.mk
-include $(MAKEFILE_DIR)/pg/pg.mk
-include $(MAKEFILE_DIR)/davmail/davmail.mk
-include $(MAKEFILE_DIR)/dovecot/dovecot.mk
-include $(MAKEFILE_DIR)/hugo/hugo.mk
-include $(MAKEFILE_DIR)/imapfilter/imapfilter.mk
-include $(MAKEFILE_DIR)/mailctl/mailctl.mk
-include $(MAKEFILE_DIR)/pizauth/pizauth.mk
-include $(MAKEFILE_DIR)/proton-bridge/proton-bridge.mk
-include $(MAKEFILE_DIR)/toolbx/toolbx.mk
-include $(MAKEFILE_DIR)/weechat/weechat.mk
-# Gvisor containers
-include $(MAKEFILE_DIR)/beets/beets.mk
-include $(MAKEFILE_DIR)/busybox/busybox.mk
-include $(MAKEFILE_DIR)/changedetection/changedetection.mk
-include $(MAKEFILE_DIR)/flexo/flexo.mk
-include $(MAKEFILE_DIR)/grafana/grafana.mk
-include $(MAKEFILE_DIR)/grocy/grocy.mk
-include $(MAKEFILE_DIR)/monero/monero.mk
-include $(MAKEFILE_DIR)/mumble-server/mumble-server.mk
-include $(MAKEFILE_DIR)/powerwall/powerwall.mk
-include $(MAKEFILE_DIR)/smb/samba.mk
-include $(MAKEFILE_DIR)/ssh/ssh.mk
-include $(MAKEFILE_DIR)/syncthing/syncthing.mk
-include $(MAKEFILE_DIR)/terraforming-mars/terraforming-mars.mk
-include $(MAKEFILE_DIR)/traefik/traefik.mk
-include $(MAKEFILE_DIR)/vault/vault.mk
-include $(MAKEFILE_DIR)/vaultwarden/vaultwarden.mk
-include $(MAKEFILE_DIR)/wg1_qbt/qbittorrent.mk
-include $(MAKEFILE_DIR)/wg2_usenet/usenet.mk
-include $(MAKEFILE_DIR)/wg3_general/wg3_general.mk
-include $(MAKEFILE_DIR)/wg_test/wg_test.mk
-include $(MAKEFILE_DIR)/whoami/whoami.mk
-
-include global.env
-
 SHELL=/bin/sh
 UID := $(shell id -u)
+CMD := docker
 
 list:
-	sudo docker ps -all
-	sudo docker images
-	sudo docker network ls
+	sudo ${CMD} ps -all
+	sudo ${CMD} images
+	sudo ${CMD} network ls
 
-.PHONY: all-stop
+.PHONY: all-down
 all-down:
-	sudo docker stop $(sudo docker ps -aq)
+	sudo ${CMD} stop $$(sudo docker ps -aq)
 
 .PHONY: all-remove
 all-remove:
-	sudo docker rm $(sudo docker ps -aq)
+	sudo ${CMD} rm $$(sudo docker ps -aq)
+	sudo ${CMD} network prune
+
+.PHONY: build
+build:
+	sudo ${CMD} compose --env-file compose/.env -f compose/traefik/compose.yml build
 
 .PHONY: all-up
-all-up: powerwall-run \
-	grafana-run \
-	vault-run \
-	syncthing-run \
-	bt-run \
-	samba \
-	flexo-run \
-	wg2-up \
-	wg3-up \
-	vaultwarden-up \
-	beets-up \
-	traefik-run
+all-up:
+	sudo ${CMD} compose --env-file compose/.env -f compose/wg1_qbt/compose.yml up -d
+	sudo ${CMD} compose --env-file compose/.env -f compose/wg2_usenet/compose.yml up -d
+	sudo ${CMD} compose --env-file compose/.env -f compose/wg3_general/compose.yml up -d
+	sudo ${CMD} compose --env-file compose/.env -f compose/beets/compose.yml up -d
+	sudo ${CMD} compose --env-file compose/.env -f compose/vaultwarden/compose.yml up -d
+	sudo ${CMD} compose --env-file compose/.env -f compose/vault/compose.yml up -d
+	sudo ${CMD} compose --env-file compose/.env -f compose/syncthing/compose.yml up -d
+	sudo ${CMD} compose --env-file compose/.env -f compose/smb/compose.yml up -d
+	sudo ${CMD} compose --env-file compose/.env -f compose/flexo/compose.yml up -d
+	sudo ${CMD} compose --env-file compose/.env --env-file compose/powerwall/.env -f compose/powerwall/compose.yml up -d
+	sudo ${CMD} compose --env-file compose/.env -f compose/grafana/compose.yml up -d
+	sudo ${CMD} compose --env-file compose/.env -f compose/traefik/compose.yml up -d

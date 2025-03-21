@@ -1,0 +1,42 @@
+name: vault
+services:
+  vault:
+    image: docker.io/hashicorp/vault
+    container_name: vault
+    runtime: runsc-kvm
+    restart: unless-stopped
+    user: 2005:2005
+    cpus: 2
+    mem_limit: 8g
+    pids_limit: 2048
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - IPC_LOCK
+      - SETGID
+      - SETUID
+    environment:
+      - VAULT_ADDR=http://0.0.0.0:8200
+      - VAULT_API_ADDR=http://0.0.0.0:8200
+      - SKIP_SETCAP=1
+      - SKIP_CHOWN=1
+    entrypoint: vault server -config=/vault/config/vault.hcl
+    volumes:
+      - /opt/appdata/vault/config:/vault/config:rw
+      - /opt/appdata/vault/data:/vault/data:rw
+    ports:
+      - 127.0.0.1:8200:8200
+    networks:
+      frontend:
+        ipv4_address: 172.23.0.2
+
+networks:
+  frontend:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 172.23.0.0/16
+        - subnet: fd23:1::/48
