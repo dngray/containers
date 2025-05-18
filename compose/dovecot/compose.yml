@@ -1,0 +1,12 @@
+services:
+  dovecot:
+    image: dovecot/dovecot
+    container_name: dovecot
+    ports:
+      - 143:143
+      - 993:993
+      - 587:587
+    volumes:
+      - /mnt/container_data/dovecot:/etc/dovecot
+      - /mnt/mail:/srv/mail
+    restart: unless-stopped

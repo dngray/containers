@@ -1,0 +1,55 @@
+services:
+  {{ .container_data.docker.syncthing.instance_1.name }}:
+    extends:
+      file: ./syncthing_common.yml
+      service: syncthing
+    container_name: {{ .container_data.docker.syncthing.instance_1.name }}
+    environment:
+      - PUID=1000
+      - PGID=1000
+    volumes:
+      - /home/${USER1}/.config/syncthing/:/config
+{{- range $paths := index .container_data.docker.syncthing.instance_1.paths }}
+      - {{ . }}
+{{- end }}
+    ports:
+      - 127.0.0.1:8384:8384
+      - 22000:22000/tcp
+      - 22000:22000/udp
+      # - 21027:21027/udp
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.{{ .container_data.docker.syncthing.instance_1.name }}.tls=true"
+      - "traefik.http.routers.{{ .container_data.docker.syncthing.instance_1.name }}.tls.certresolver=stepca"
+      - "traefik.http.routers.{{ .container_data.docker.syncthing.instance_1.name }}.rule=Host(`{{ .container_data.docker.syncthing.instance_1.name }}.$MY_DOMAIN`)"
+      - "traefik.http.routers.{{ .container_data.docker.syncthing.instance_1.name }}.entrypoints=websecure"
+
+  {{ .container_data.docker.syncthing.instance_2.name }}:
+    extends:
+      file: ./syncthing_common.yml
+      service: syncthing
+    container_name: {{ .container_data.docker.syncthing.instance_2.name }}
+    environment:
+      - PUID=1001
+      - PGID=1001
+    volumes:
+      - /home/${USER2}/.config/syncthing/:/config
+{{- range $paths := index .container_data.docker.syncthing.instance_2.paths }}
+      - {{ . }}
+{{- end }}
+    ports:
+      - 127.0.0.1:8385:8385
+      - 22001:22000/tcp
+      - 22001:22000/udp
+      # - 21028:21028/udp
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.{{ .container_data.docker.syncthing.instance_2.name }}.tls=true"
+      - "traefik.http.routers.{{ .container_data.docker.syncthing.instance_2.name }}.tls.certresolver=stepca"
+      - "traefik.http.routers.{{ .container_data.docker.syncthing.instance_2.name }}.rule=Host(`{{ .container_data.docker.syncthing.instance_2.name }}.$MY_DOMAIN`)"
+      - "traefik.http.routers.{{ .container_data.docker.syncthing.instance_2.name }}.entrypoints=websecure"
+
+networks:
+  default:
+    external: true
+    name: ${DEFAULT_NETWORK}

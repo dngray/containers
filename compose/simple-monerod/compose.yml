@@ -1,0 +1,33 @@
+services:
+  monerod:
+    image: sethsimmons/simple-monerod:latest
+    container_name: monerod
+    network_mode: container:vpn_general
+    volumes:
+      - /mnt/monero:/home/monero
+    command:
+      - "--rpc-restricted-bind-ip=0.0.0.0"
+      - "--rpc-restricted-bind-port=18089"
+      - "--no-igd"
+      - "--no-zmq"
+      - "--enable-dns-blocklist"
+    user: ${FIXUID:-1003}:${FIXGID:-1003}
+    restart: unless-stopped
+
+  # autoheal:
+  #     image: willfarrell/autoheal:latest
+  #     container_name: autoheal
+  #     restart: unless-stopped
+  #     environment:
+  #         AUTOHEAL_CONTAINER_LABEL: all
+  #     volumes:
+  #         - "/var/run/docker.sock:/var/run/docker.sock"
+
+  watchtower:
+      image: containrrr/watchtower:latest
+      container_name: watchtower
+      restart: unless-stopped
+      volumes:
+          - "/var/run/docker.sock:/var/run/docker.sock"
+#volumes:
+#  bitmonero:

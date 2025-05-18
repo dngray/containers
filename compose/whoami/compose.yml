@@ -1,0 +1,16 @@
+services:
+  whoami:
+    image: "containous/whoami"
+    container_name: "whoami"
+    hostname: "whoami"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whoami.tls=true"
+      - "traefik.http.routers.whoami.tls.certresolver=stepca"
+      - "traefik.http.routers.whoami.rule=Host(`whoami.$MY_DOMAIN`)"
+      - "traefik.http.routers.whoami.entrypoints=websecure"
+
+networks:
+  default:
+    external: true
+    name: ${DEFAULT_NETWORK}

@@ -1,0 +1,6 @@
+services:
+  syncthing:
+    image: lscr.io/linuxserver/syncthing:latest
+    environment:
+      - TZ=${TZ}
+    restart: unless-stopped
