@@ -33,4 +33,5 @@ all-up:
 	sudo ${CMD} compose --env-file compose/.env -f compose/flexo/compose.yml up -d
 	sudo ${CMD} compose --env-file compose/.env --env-file compose/powerwall/.env -f compose/powerwall/compose.yml up -d
 	sudo ${CMD} compose --env-file compose/.env -f compose/grafana/compose.yml up -d
+	sudo ${CMD} compose --env-file compose/.env -f compose/cinny/compose.yml up -d
 	sudo ${CMD} compose --env-file compose/.env -f compose/traefik/compose.yml up -d
