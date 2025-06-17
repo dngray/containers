@@ -1,6 +1,6 @@
 services:
   powerwall_apps:
-    runtime: runsc-kvm
+    runtime: runsc-systrap
     restart: unless-stopped
     cpus: 2
     mem_limit: 8g

@@ -3,7 +3,7 @@ services:
   vault:
     image: docker.io/hashicorp/vault
     container_name: vault
-    runtime: runsc-kvm
+    runtime: runsc-systrap
     restart: unless-stopped
     user: 2005:2005
     cpus: 2
