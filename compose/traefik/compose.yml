@@ -8,7 +8,7 @@ services:
     image: localhost/traefik
     # image: dockerhub.io/traefik
     hostname: traefik
-    runtime: runsc-kvm
+    runtime: runsc-systrap
     restart: unless-stopped
     read_only: true
     mem_limit: 8g

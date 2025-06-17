@@ -4,7 +4,7 @@ services:
     image: ghcr.io/cinnyapp/cinny:latest
     container_name: cinny
     network_mode: container:wg3
-    runtime: runsc-kvm
+    runtime: runsc-systrap
     restart: unless-stopped
     # user: 1003:1003
     cpus: 2

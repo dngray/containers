@@ -3,7 +3,7 @@ services:
   flexo:
     image: docker.io/nroi/flexo
     container_name: flexo
-    runtime: runsc-kvm
+    runtime: runsc-systrap
     restart: unless-stopped
     user: 2001:2001
     cpus: 2
