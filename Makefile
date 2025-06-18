@@ -20,8 +20,12 @@ all-remove:
 build:
 	sudo ${CMD} compose --env-file compose/.env -f compose/traefik/compose.yml build
 
+.PHONY: stepca
+stepca:
+	sudo ${CMD} compose --env-file compose/.env -f compose/stepca/compose.yml up -d
+
 .PHONY: all-up
-all-up:
+all-up: stepca
 	sudo ${CMD} compose --env-file compose/.env -f compose/wg1_qbt/compose.yml up -d
 	sudo ${CMD} compose --env-file compose/.env -f compose/wg2_usenet/compose.yml up -d
 	sudo ${CMD} compose --env-file compose/.env -f compose/wg3_general/compose.yml up -d

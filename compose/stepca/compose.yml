@@ -1,0 +1,21 @@
+name: stepca
+services:
+  stepca:
+    image: docker.io/smallstep/step-ca
+    container_name: stepca
+    runtime: runsc-systrap
+    restart: unless-stopped
+    user: 2006:2006
+    cpus: 2
+    mem_limit: 8g
+    pids_limit: 2048
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - /opt/appdata/stepca:/home/step:rw
+      - /opt/appdata/vault/data:/vault/data:rw
+    ports:
+      - 9000:9000
