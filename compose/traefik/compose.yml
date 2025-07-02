@@ -6,7 +6,7 @@ services:
       dockerfile: Dockerfile
     container_name: traefik
     image: localhost/traefik
-    # image: dockerhub.io/traefik
+    # image: docker.io/traefik
     hostname: traefik
     runtime: runsc-systrap
     restart: unless-stopped
