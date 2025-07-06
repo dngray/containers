@@ -19,7 +19,7 @@ services:
     extends:
       file: powerwall_common.yml
       service: powerwall_apps
-    image: docker.io/jasonacox/pypowerwall:0.12.7t68
+    image: docker.io/jasonacox/pypowerwall:0.13.1t75
     container_name: pypowerwall
     hostname: pypowerwall
     environment:
@@ -52,7 +52,7 @@ services:
     extends:
       file: powerwall_common.yml
       service: powerwall_apps
-    image: docker.io/jasonacox/weather411
+    image: docker.io/jasonacox/weather411:0.2.3
     container_name: weather411
     hostname: weather411
     environment:
