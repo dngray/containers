@@ -45,6 +45,7 @@ services:
       - powerwall_pypowerwall_backend
       - grafana_frontend
       - vault_frontend
+      - registry_frontend
 
 networks:
   wg1_qbt_frontend:
@@ -73,4 +74,7 @@ networks:
     external: true
   vault_frontend:
     name: vault_frontend
+    external: true
+  registry_frontend:
+    name: registry_frontend
     external: true

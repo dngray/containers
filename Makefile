@@ -24,8 +24,12 @@ build:
 stepca:
 	sudo ${CMD} compose --env-file compose/.env -f compose/stepca/compose.yml up -d
 
+.PHONY: registry
+registry:
+	sudo ${CMD} compose --env-file compose/.env -f compose/registry/compose.yml up -d
+
 .PHONY: all-up
-all-up: stepca
+all-up: stepca registry
 	sudo ${CMD} compose --env-file compose/.env -f compose/wg1_qbt/compose.yml up -d
 	sudo ${CMD} compose --env-file compose/.env -f compose/wg2_usenet/compose.yml up -d
 	sudo ${CMD} compose --env-file compose/.env -f compose/wg3_general/compose.yml up -d

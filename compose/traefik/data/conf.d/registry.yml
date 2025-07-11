@@ -1,0 +1,19 @@
+http:
+  services:
+    registry-ui:
+      loadBalancer:
+        servers:
+          - url: http://172.30.0.3:80
+        passHostHeader: true
+
+  routers:
+    registry-ui-secure:
+      rule: Host(`registry.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - secure-headers@file
+      tls:
+        certResolver: stepca
+      service: registry-ui@file
