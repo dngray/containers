@@ -45,7 +45,7 @@ services:
       - powerwall_pypowerwall_backend
       - grafana_frontend
       - vault_frontend
-      - registry_frontend
+      - harbor_harbor
 
 networks:
   wg1_qbt_frontend:
@@ -75,6 +75,6 @@ networks:
   vault_frontend:
     name: vault_frontend
     external: true
-  registry_frontend:
-    name: registry_frontend
+  harbor_harbor:
+    name: harbor_harbor
     external: true

@@ -1,6 +1,8 @@
 Root_CA.pem
 compose/.env
 compose/flexo/flexo.env
+compose/harbor/harbor.yml
+compose/harbor/reset_password.sql
 compose/powerwall/data/pypowerwall.env
 compose/powerwall/data/telegraf.conf
 compose/powerwall/data/weather411.conf
