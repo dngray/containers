@@ -9,6 +9,8 @@ context:
 inputFiles:
   - /input/compose/.env.tmpl
   - /input/compose/flexo/flexo.env.tmpl
+  - /input/compose/harbor/harbor.yml.tmpl
+  - /input/compose/harbor/reset_password.sql.tmpl
   - /input/compose/powerwall/data/pypowerwall.env.tmpl
   - /input/compose/powerwall/data/telegraf.conf.tmpl
   - /input/compose/powerwall/data/weather411.conf.tmpl
@@ -25,6 +27,8 @@ inputFiles:
 outputFiles:
   - /output/compose/.env
   - /output/compose/flexo/flexo.env
+  - /output/compose/harbor/harbor.yml
+  - /output/compose/harbor/reset_password.sql
   - /output/compose/powerwall/data/pypowerwall.env
   - /output/compose/powerwall/data/telegraf.conf
   - /output/compose/powerwall/data/weather411.conf

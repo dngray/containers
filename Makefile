@@ -28,8 +28,12 @@ stepca:
 registry:
 	sudo ${CMD} compose --env-file compose/.env -f compose/registry/compose.yml up -d
 
+.PHONY: harbor
+harbor:
+	sudo ${CMD} compose --env-file compose/.env -f compose/harbor/compose.yml up -d
+
 .PHONY: all-up
-all-up: stepca registry
+all-up: stepca harbor
 	sudo ${CMD} compose --env-file compose/.env -f compose/wg1_qbt/compose.yml up -d
 	sudo ${CMD} compose --env-file compose/.env -f compose/wg2_usenet/compose.yml up -d
 	sudo ${CMD} compose --env-file compose/.env -f compose/wg3_general/compose.yml up -d
