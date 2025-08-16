@@ -11,7 +11,7 @@ services:
       - PGID=1000
     volumes:
       - /home/${U1}/.config/syncthing/:/config
-{{- range $paths := index .container_data.docker.syncthing.instance_1.paths }}
+{{- range $paths := index .container_data.docker.syncthing_server.instance_1.paths }}
       - {{ . }}
 {{- end }}
     ports:
@@ -32,7 +32,7 @@ services:
       - PGID=1001
     volumes:
       - /home/${U2}/.config/syncthing/:/config
-{{- range $paths := index .container_data.docker.syncthing.instance_2.paths }}
+{{- range $paths := index .container_data.docker.syncthing_server.instance_2.paths }}
       - {{ . }}
 {{- end }}
     ports:
