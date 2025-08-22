@@ -14,8 +14,9 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - NET_BIND_SERVICE
     volumes:
       - /opt/appdata/stepca:/home/step:rw
-      - /opt/appdata/vault/data:/vault/data:rw
     ports:
       - 9000:9000

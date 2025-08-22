@@ -13,9 +13,9 @@ compose/traefik/data/traefik.env
 compose/traefik/data/traefik.yml
 compose/vaultwarden/vault.env
 container_data.json
-quadlets/crowdin/.env
 quadlets/syncthing/syncthing1.container
 quadlets/syncthing/syncthing2.container
+run/crowdin/.env
 old/busybox/.env
 old/mumble-server/mumble.env
 old/wg_test/.env
