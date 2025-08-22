@@ -22,7 +22,6 @@ inputFiles:
   - /input/quadlets/crowdin/.env.tmpl
   - /input/quadlets/syncthing/syncthing1.container.tmpl
   - /input/quadlets/syncthing/syncthing2.container.tmpl
-  - /input/old/busybox/.env.tmpl
   - /input/old/mumble-server/mumble.env.tmpl
   - /input/old/wg_test/.env.tmpl
 
@@ -42,6 +41,5 @@ outputFiles:
   - /output/quadlets/crowdin/.env
   - /output/quadlets/syncthing/syncthing1.container
   - /output/quadlets/syncthing/syncthing2.container
-  - /output/old/busybox/.env
   - /output/old/mumble-server/mumble.env
   - /output/old/wg_test/.env

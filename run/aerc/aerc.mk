@@ -4,7 +4,7 @@
 
 .PHONY: aerc-build
 aerc-build:
-	podman build -f aerc/Containerfile \
+	podman build -f build/aerc/Containerfile \
 		--build-arg BUILD_DATE=$(date -u) \
 		--build-arg UID=$(UID) \
 		--build-arg LANG=en_US.UTF-8 \

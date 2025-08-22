@@ -10,7 +10,7 @@ crowdin-pull:
 crowdin:
 	podman run -it --replace --userns=keep-id \
 		-v ~/src:/src:z \
-		--env-file crowdin/.env \
+		--env-file run/crowdin/.env \
 		--name crowdin \
 		docker.io/crowdin/cli
 

@@ -5,7 +5,6 @@ ARG NAME=aerc-build-env
 LABEL name="$NAME"
 LABEL version=latest
 LABEL created="$BUILD_DATE"
-MAINTAINER "dngray"
 
 RUN apk add --no-cache \
   man-db \
