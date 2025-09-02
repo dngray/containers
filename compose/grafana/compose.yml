@@ -20,6 +20,12 @@ services:
       - /opt/appdata/grafana/:/var/lib/grafana
     # depends_on:
     #   - influxdb
+    healthcheck:
+      test: curl -f http://grafana:9000/api/health || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     networks:
       frontend:
         ipv4_address: 172.27.0.2

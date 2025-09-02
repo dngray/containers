@@ -14,12 +14,18 @@ services:
     networks:
       influxdb_backend:
         ipv4_address: 172.29.0.2
+    healthcheck:
+        test: curl -f http://influxdb:8086/health || exit 1
+        interval: 30s
+        timeout: 10s
+        retries: 3
+        start_period: 60s
 
   pypowerwall:
     extends:
       file: powerwall_common.yml
       service: powerwall_apps
-    image: docker.io/jasonacox/pypowerwall:0.13.1t75
+    image: docker.io/jasonacox/pypowerwall:0.14.1t81
     container_name: pypowerwall
     hostname: pypowerwall
     environment:
@@ -30,6 +36,12 @@ services:
     networks:
       pypowerwall_backend:
         ipv4_address: 172.28.0.2
+    healthcheck:
+        test: wget --spider -q http://pypowerwall:8675/api/site_info || exit 1
+        interval: 30s
+        timeout: 10s
+        retries: 3
+        start_period: 60s
 
   telegraf:
     extends:
@@ -47,6 +59,12 @@ services:
     depends_on:
       - influxdb
       - pypowerwall
+    healthcheck:
+        test: pgrep telegraf || exit 1
+        interval: 30s
+        timeout: 10s
+        retries: 3
+        start_period: 30s
 
   weather:
     extends:
@@ -64,7 +82,12 @@ services:
     user: "${PWD_USER:-1000:1000}"
     depends_on:
       - influxdb
-
+    healthcheck:
+        test: wget --spider -q http://weather411:8676/stats || exit 1
+        interval: 30s
+        timeout: 10s
+        retries: 3
+        start_period: 60s
 networks:
    pypowerwall_backend:
     enable_ipv6: true
