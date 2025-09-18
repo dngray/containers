@@ -41,7 +41,7 @@ aerc:
 		-v ~/Downloads:/home/aerc/Downloads \
 		-v /run/user/${UID}:/run/user/${UID}:ro \
 		-e TZ="" \
-		--security-opt label:disable \
+		--security-opt label=type:container_t \
 		--name aerc \
 		localhost/aerc
 
