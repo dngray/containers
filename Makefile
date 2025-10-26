@@ -3,6 +3,7 @@ include run/run.mk
 
 SHELL=/bin/sh
 UID := $(shell id -u)
+GID := $(shell id -g)
 CMD := docker
 
 list:
@@ -12,9 +13,9 @@ list:
 
 .PHONY: all-down
 all-down:
-	sudo ${CMD} stop $$(sudo ${CMD} ps -aq)
+	@sudo ${CMD} ps -aq | xargs -r sudo ${CMD} stop
 
 .PHONY: all-remove
 all-remove:
-	sudo ${CMD} rm $$(sudo ${CMD} ps -aq)
-	sudo ${CMD} network prune
+	@sudo ${CMD} ps -aq | xargs -r sudo ${CMD} rm
+	@sudo ${CMD} network prune -f
