@@ -1,0 +1,99 @@
+module container_aerc 1.0;
+
+require {
+    type container_t;
+    type user_home_t;
+    type config_home_t;
+    type data_home_t;
+    type gconf_home_t;
+    type gpg_secret_t;
+    type home_bin_t;
+    type user_tmp_t;
+    type unconfined_t;
+    class dir { read write add_name remove_name getattr search watch setattr create };
+    class file { read write execute open getattr link unlink create append map rename lock execute_no_trans setattr ioctl };
+    class lnk_file { read };
+    class sock_file { write };
+    class unix_stream_socket { connectto };
+    class process { fork exec };
+}
+
+###########################################
+# Home files (~)
+###########################################
+allow container_t user_home_t:dir { read getattr search };
+allow container_t user_home_t:file { open read write getattr append create };
+
+###########################################
+# Config files (~/.config)
+###########################################
+allow container_t config_home_t:dir { read getattr search };
+allow container_t config_home_t:file { open read getattr };
+allow container_t config_home_t:file ioctl;
+
+###########################################
+# Executables (~/.local/bin)
+###########################################
+allow container_t home_bin_t:file { open execute getattr read execute_no_trans };
+
+###########################################
+# Data files (~/.local/share)
+###########################################
+allow container_t data_home_t:dir {
+    read
+    write
+    getattr
+    search
+    watch
+    add_name
+    remove_name
+    setattr
+    create
+};
+
+allow container_t data_home_t:file {
+    open
+    read
+    write
+    getattr
+    execute
+    append
+    create
+    map
+    rename
+    unlink
+    link
+    lock
+    setattr
+    ioctl
+};
+
+allow container_t data_home_t:lnk_file { read };
+
+###########################################
+# State files (~/.local/state)
+###########################################
+allow container_t gconf_home_t:dir { read write getattr search watch add_name remove_name };
+allow container_t gconf_home_t:file { open read write getattr append create lock rename unlink };
+allow container_t gconf_home_t:file ioctl;
+allow container_t gconf_home_t:file setattr;
+
+###########################################
+# GPG secrets (~/.gnupg)
+###########################################
+allow container_t gpg_secret_t:dir { read write getattr search add_name remove_name };
+allow container_t gpg_secret_t:file { open read write getattr create append link unlink lock };
+allow container_t gpg_secret_t:sock_file write;
+allow container_t gpg_secret_t:unix_stream_socket connectto;
+
+###########################################
+# /run/user/$UID sockets
+###########################################
+allow container_t user_tmp_t:dir { read getattr search };
+allow container_t user_tmp_t:sock_file write;
+allow container_t user_tmp_t:unix_stream_socket connectto;
+
+###########################################
+# Connect to host gpg-agent socket
+###########################################
+allow container_t unconfined_t:unix_stream_socket connectto;

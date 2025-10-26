@@ -1,113 +1,102 @@
-FROM docker.io/alpine:edge AS build
+# Stage 1: Build the aerc and goimapnotify binaries
+FROM docker.io/golang:1.25-trixie AS builder
 
-ARG BUILD_DATE
-ARG NAME=aerc-build-env
-LABEL name="$NAME"
-LABEL version=latest
-LABEL created="$BUILD_DATE"
+# ARGs for the UID and GID of the host user to avoid ownership issues
+ARG HOST_UID
+ARG HOST_GID
+ARG version=0.21.0
 
-RUN apk add --no-cache \
-  man-db \
-  git \
-  build-base \
-  notmuch-dev \
-  automake \
-  autoconf \
-  go
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean; \
+    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        libnotmuch-dev \
+        scdoc \
+    && groupadd -g ${HOST_GID} aerc \
+    && useradd --create-home --shell /bin/bash -u ${HOST_UID} -g ${HOST_GID} aerc \
+    && passwd --delete aerc
 
-RUN git clone https://git.sr.ht/~sircmpwn/scdoc /opt/scdoc
-WORKDIR /opt/scdoc
-RUN make && make install
-
-RUN git clone https://git.sr.ht/~rjarry/aerc /opt/aerc
-WORKDIR /opt/aerc
-RUN make && make install
-
-# RUN git clone https://git.code.sf.net/p/isync/isync /opt/isync
-# WORKDIR /opt/isync
-# RUN make -f Makefile.am log \
-#     && autoreconf -f -i \
-#     && ./configure \
-#     && make \
-#     && make install
-
-FROM docker.io/alpine:edge
-ARG BUILD_DATE
-ARG UID
-ARG LANG
-LABEL name=aerc
-LABEL version="$IMAGE_VERSION"
-LABEL created="$BUILD_DATE"
-MAINTAINER "dngray"
-
-ENV TERM xterm-256color
-ENV COLORTERM truecolor
-ENV GPG_TTY /dev/console
-ENV EDITOR nvim
-ENV LC_ALL ${LANG}
-
-EXPOSE 8080
-
-RUN adduser -D -s /bin/ash -u ${UID} aerc
-
-ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/aerc/.local/bin"
-
-RUN echo "@community https://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories
-
-RUN apk add --no-cache \
-  less \
-  mandoc \
-  git \
-  ca-certificates \
-  neovim \
-  w3m \
-  gopass \
-  khard@community \
-  vdirsyncer \
-  notmuch \
-  ncurses \
-  lua \
-  build-base \
-  ripgrep \
-  pandoc \
-  msmtp \
-  db \
-  bash \
-  neomutt \
-  fzf \
-  fd \
-  goimapnotify \
-  dante@community \
-  bat@community \
-  catimg \
-  poppler-utils \
-  jq \
-  musl \
-  musl-utils \
-  musl-locales \
-  isync \
-  tzdata
-
-RUN echo "@testing https://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
-
-RUN apk add --no-cache \
-  imapfilter@testing \
-  glow@testing \
-  catdoc@testing
-
-COPY --from=build /usr/local/bin/aerc /usr/local/bin/
-COPY --from=build /usr/local/share/aerc/ /usr/local/share/aerc/
-COPY --from=build /usr/local/libexec/aerc/ /usr/local/libexec/aerc/
-# COPY --from=build /usr/local/bin/mbsync /usr/bin/mbsync
-# COPY --from=build /usr/local/bin/mbsync-get-cert /usr/bin/mbsync-get-cert
-# COPY --from=build /usr/local/bin/mdconvert /usr/bin/mdconvert
-COPY --from=build /usr/local/share/man/man1/aerc* /usr/local/share/man/man1/
-COPY --from=build /usr/local/share/man/man5/aerc* /usr/local/share/man/man5/
-COPY --from=build /usr/local/share/man/man7/aerc* /usr/local/share/man/man7/
-
-RUN ln -s /usr/bin/pinentry* /usr/local/bin/
-
+WORKDIR /home/aerc/aerc
 USER aerc
-WORKDIR /home/aerc
 
-ENTRYPOINT ["/usr/local/bin/aerc"]
+# Download and build aerc
+ADD --chown=aerc:aerc https://git.sr.ht/~rjarry/aerc/archive/${version}.tar.gz aerc.tar.gz
+RUN tar xzf aerc.tar.gz --strip-components=1
+RUN gmake && gmake install PREFIX=~/.local
+
+# Build goimapnotify as the same user
+RUN go install gitlab.com/shackra/goimapnotify@latest
+
+
+# Stage 2: Final image
+FROM docker.io/debian:latest
+
+# ARGs for the UID and GID of the host user to avoid ownership issues
+ARG HOST_UID
+ARG HOST_GID
+
+# Ensure SSL certificates and wget are installed in the final image
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        wget
+
+# Download the Gopass keyring using wget
+RUN wget -qO- https://packages.gopass.pw/repos/gopass/gopass-archive-keyring.gpg | tee /usr/share/keyrings/gopass-archive-keyring.gpg >/dev/null
+
+# Add the Gopass repository to sources.list
+RUN cat << EOF | tee /etc/apt/sources.list.d/gopass.sources
+Types: deb
+URIs: https://packages.gopass.pw/repos/gopass
+Suites: stable
+Architectures: all amd64 arm64 armhf
+Components: main
+Signed-By: /usr/share/keyrings/gopass-archive-keyring.gpg
+EOF
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean; \
+    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        less \
+        libsixel-bin \
+        man \
+        notmuch \
+        w3m \
+        gnupg \
+        vdirsyncer \
+        khard \
+        msmtp \
+        isync \
+        bat \
+        fd-find \
+        gopass \
+        gopass-archive-keyring \
+        neomutt \
+    && groupadd -g ${HOST_GID} aerc \
+    && useradd --create-home --shell /bin/bash -u ${HOST_UID} -g ${HOST_GID} aerc \
+    && passwd --delete aerc \
+    && mkdir -p ~aerc/.local/state \
+    && chown -R aerc:aerc ~aerc/.local
+
+# Install Neovim from local .deb
+COPY nvim-linux-x86_64.deb /tmp/nvim-linux-x86_64.deb
+RUN dpkg -i /tmp/nvim-linux-x86_64.deb || apt-get install -f -y && rm /tmp/nvim-linux-x86_64.deb
+
+# Copy binaries and directories from the builder image
+COPY --from=builder --chown=aerc:aerc /home/aerc/.local/ /home/aerc/.local/
+COPY --from=builder /go/bin/goimapnotify /usr/local/bin/goimapnotify
+
+# Ensure binaries and directories are accessible by arbitrary UID
+RUN chmod -R a+rx /home/aerc \
+    && chmod -R a+rx /home/aerc/.local/bin \
+    && chmod -R a+rw /home/aerc/.local/state
+
+ENV PATH=/home/aerc/.local/bin:${PATH} LANG=C.UTF-8
+WORKDIR /home/aerc
+USER aerc
+
+# Set the entrypoint for the container to the aerc binary
+ENTRYPOINT ["/home/aerc/.local/bin/aerc"]
