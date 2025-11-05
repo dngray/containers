@@ -1,5 +1,5 @@
-ARG TRAEFIK_VERSION=3.5.3
-ARG CHECKSUM=4db5ee36436f3e679d87663246de203ed12c38199a5b1772987a93328169263a
+ARG TRAEFIK_VERSION=3.5.4
+ARG CHECKSUM=9f1d30b3f3b547da88bf95e49c416cd898968be6f9157571d000e646b2ef8bae
 
 FROM alpine AS downloader
 
@@ -14,7 +14,7 @@ RUN wget --quiet -O /tmp/traefik.tar.gz https://github.com/traefik/traefik/relea
  && chmod +x /usr/local/bin/traefik
 
 
-FROM gcr.io/distroless/static-debian12
+FROM gcr.io/distroless/static-debian13
 COPY --from=downloader /usr/local/bin/traefik /
 EXPOSE 8080 4430
 USER nobody
