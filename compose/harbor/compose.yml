@@ -1,6 +1,6 @@
 services:
   log:
-    image: goharbor/harbor-log:v2.14.0
+    image: goharbor/harbor-log:v2.14.1
     container_name: harbor-log
     restart: always
     cap_drop:
@@ -23,7 +23,7 @@ services:
     networks:
       - harbor
   registry:
-    image: goharbor/registry-photon:v2.14.0
+    image: goharbor/registry-photon:v2.14.1
     container_name: registry
     restart: always
     cap_drop:
@@ -51,7 +51,7 @@ services:
         syslog-address: "tcp://localhost:1514"
         tag: "registry"
   registryctl:
-    image: goharbor/harbor-registryctl:v2.14.0
+    image: goharbor/harbor-registryctl:v2.14.1
     container_name: registryctl
     env_file:
       - /opt/appdata/harbor/common/config/registryctl/env
@@ -81,7 +81,7 @@ services:
         syslog-address: "tcp://localhost:1514"
         tag: "registryctl"
   postgresql:
-    image: goharbor/harbor-db:v2.14.0
+    image: goharbor/harbor-db:v2.14.1
     container_name: harbor-db
     restart: always
     cap_drop:
@@ -106,7 +106,7 @@ services:
         tag: "postgresql"
     shm_size: '1gb'
   core:
-    image: goharbor/harbor-core:v2.14.0
+    image: goharbor/harbor-core:v2.14.1
     container_name: harbor-core
     env_file:
       - /opt/appdata/harbor/common/config/core/env
@@ -145,7 +145,7 @@ services:
         syslog-address: "tcp://localhost:1514"
         tag: "core"
   portal:
-    image: goharbor/harbor-portal:v2.14.0
+    image: goharbor/harbor-portal:v2.14.1
     container_name: harbor-portal
     restart: always
     cap_drop:
@@ -170,7 +170,7 @@ services:
         tag: "portal"
 
   jobservice:
-    image: goharbor/harbor-jobservice:v2.14.0
+    image: goharbor/harbor-jobservice:v2.14.1
     container_name: harbor-jobservice
     env_file:
       - /opt/appdata/harbor/common/config/jobservice/env
@@ -199,7 +199,7 @@ services:
         syslog-address: "tcp://localhost:1514"
         tag: "jobservice"
   redis:
-    image: goharbor/redis-photon:v2.14.0
+    image: goharbor/redis-photon:v2.14.1
     container_name: redis
     restart: always
     cap_drop:
@@ -220,7 +220,7 @@ services:
         syslog-address: "tcp://localhost:1514"
         tag: "redis"
   proxy:
-    image: goharbor/nginx-photon:v2.14.0
+    image: goharbor/nginx-photon:v2.14.1
     container_name: nginx
     restart: always
     cap_drop:
