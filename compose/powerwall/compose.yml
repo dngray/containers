@@ -25,7 +25,7 @@ services:
     extends:
       file: powerwall_common.yml
       service: powerwall_apps
-    image: docker.io/jasonacox/pypowerwall:0.14.2t83
+    image: docker.io/jasonacox/pypowerwall:0.14.4t85
     container_name: pypowerwall
     hostname: pypowerwall
     environment:
