@@ -14,8 +14,12 @@ registry:
 harbor:
 	sudo ${CMD} compose --env-file compose/.env -f compose/harbor/compose.yml up -d
 
+.PHONY: mumble
+mumble:
+	sudo ${CMD} compose --env-file compose/.env -f compose/mumble/compose.yml up -d
+
 .PHONY: all-up
-all-up: stepca harbor
+all-up: stepca harbor mumble
 	sudo ${CMD} compose --env-file compose/.env -f compose/wg1_qbt/compose.yml up -d
 	sudo ${CMD} compose --env-file compose/.env -f compose/wg2_usenet/compose.yml up -d
 	sudo ${CMD} compose --env-file compose/.env -f compose/wg3_general/compose.yml up -d

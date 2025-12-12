@@ -19,3 +19,11 @@ all-down:
 all-remove:
 	@sudo ${CMD} ps -aq | xargs -r sudo ${CMD} rm
 	@sudo ${CMD} network prune -f
+
+.PHONY: template
+template:
+	podman run -v ./:/data:Z \
+		-v ./:/input:Z \
+		-v ./:/output:Z \
+	docker.io/hairyhenderson/gomplate \
+	--config=/input/.gomplate.yaml -V
