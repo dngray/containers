@@ -1,0 +1,46 @@
+name: rss
+services:
+  miniflux-db:
+    image: docker.io/library/postgres:18-trixie
+    container_name: miniflux-db
+    network_mode: container:wg3
+    runtime: runsc-systrap
+    user: "999:999"
+    restart: unless-stopped
+    cpus: 1
+    mem_limit: 1g
+    pids_limit: 128
+    cap_drop:
+      - ALL
+    env_file:
+      - miniflux.env
+    environment:
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - /opt/appdata/miniflux:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U miniflux -d miniflux"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+
+  miniflux:
+    image: docker.io/miniflux/miniflux:latest
+    container_name: miniflux
+    network_mode: container:wg3
+    runtime: runsc-systrap
+    restart: unless-stopped
+    cpus: 1
+    mem_limit: 512m
+    pids_limit: 64
+    cap_drop:
+      - ALL
+    depends_on:
+      miniflux-db:
+        condition: service_healthy
+    env_file:
+      - miniflux.env
+    environment:
+      - RUN_MIGRATIONS=1
+      - CREATE_ADMIN=1
+      - BASE_URL=https://rss.${DOMAIN}

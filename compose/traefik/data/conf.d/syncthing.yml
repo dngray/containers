@@ -1,0 +1,31 @@
+http:
+  services:
+    syncthing1:
+      loadBalancer:
+        servers:
+          - url: http://172.24.0.2:8384
+    syncthing2:
+      loadBalancer:
+        servers:
+          - url: http://172.25.0.2:8384
+  routers:
+    syncthing1-secure:
+      rule: Host(`syncthing1.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - secure-headers@file
+      tls:
+        certResolver: stepca
+      service: syncthing1@file
+    syncthing2-secure:
+      rule: Host(`syncthing2.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - secure-headers@file
+      tls:
+        certResolver: stepca
+      service: syncthing2@file

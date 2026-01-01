@@ -1,0 +1,45 @@
+log:
+  level: ERROR
+
+global:
+  sendAnonymousUsage: false
+
+api:
+  dashboard: true
+
+entryPoints:
+  http:
+    address: :8080
+    http:
+      redirections:
+        entryPoint:
+          to: :443
+          scheme: https
+          permanent: true
+  https:
+    address: :4430
+    http3:
+      advertisedPort: 443
+  # metrics:
+  #   address: 172.21.0.2:8082
+  pypw_secure:
+    address: ":8675"
+
+# metrics:
+#   prometheus:
+#     entryPoint: metrics
+
+providers:
+  file:
+    directory: /etc/traefik/conf.d
+    watch: false
+
+certificatesResolvers:
+  stepca:
+    acme:
+      caServer: "https://{{ .container_data.docker.traefik.ca }}/acme/acme/directory"
+      email: "{{ .container_data.docker.traefik.email }}"
+      storage: "/etc/acme/acme.json"
+      keyType: EC384
+      httpChallenge:
+        entryPoint: http

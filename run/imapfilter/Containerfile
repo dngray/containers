@@ -1,0 +1,68 @@
+FROM docker.io/alpinelinux/build-base:latest AS build
+
+ARG BUILD_DATE
+ARG NAME=vault-build-env
+ARG VAULT_VER="1.15.x"
+LABEL name="$NAME"
+LABEL version=latest
+LABEL created="$BUILD_DATE"
+
+RUN echo "https://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories
+RUN doas apk add --update --no-cache --no-progress \
+  go \
+  python3 \
+  nodejs \
+  npm \
+  yarn \
+  libcap-utils
+
+# setup directory to pass in build instructions files for abuild
+COPY --chown=buildozer:buildozer vault/* /home/buildozer/aports/community/vault/
+WORKDIR /home/buildozer/aports/community/vault
+
+# create keys for signing packages after the build has been finished
+RUN abuild-keygen -a -i -n
+
+# setup git for the build user
+RUN git config --global user.name 'Build User'
+RUN git config --global user.email 'build-user@example.com'
+
+# copy vault into dir
+RUN abuild -r
+
+FROM docker.io/alpine:latest
+
+ARG IMAPFILTER_HOME
+ARG BUILD_DATE
+ARG IMAGE_VERSION
+ARG NAME=imapfilter
+
+LABEL name=imapfilter
+LABEL version="$IMAGE_VERSION"
+LABEL created="$BUILD_DATE"
+
+RUN echo "@testing https://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
+
+COPY Root_CA.pem /usr/local/share/ca-certificates/Root_CA.crt
+
+RUN cat /usr/local/share/ca-certificates/Root_CA.crt >> /etc/ssl/certs/ca-certificates.crt && \
+    apk --no-cache add \
+      imapfilter@testing \
+			mailctl@testing \
+      jq \
+      gopass
+
+COPY --from=build /home/buildozer/.abuild/*.pub /etc/apk/keys/
+COPY --from=build /home/buildozer/packages/community/x86_64/*.apk /tmp
+RUN apk add /tmp/*.apk
+
+# setup the build user in container
+RUN adduser -D imapfilter
+
+# make imapfilter the current user in the image
+USER imapfilter
+WORKDIR /home/imapfilter
+
+ENV IMAPFILTER_HOME /home/imapfilter/.config/imapfilter
+
+CMD [ "/usr/bin/imapfilter" ]

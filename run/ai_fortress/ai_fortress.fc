@@ -1,0 +1,9 @@
+# Project Source Code
+HOME_DIR/src(/.*)?                          gen_context(system_u:object_r:fortress_src_t,s0)
+HOME_DIR/workspace(/.*)?                    gen_context(system_u:object_r:fortress_src_t,s0)
+
+# Fortress Specific Persistence (Covers share, cache, config, and state)
+HOME_DIR/\.config/ai-fortress(/.*)?         gen_context(system_u:object_r:fortress_config_t,s0)
+HOME_DIR/\.cache/ai-fortress(/.*)?          gen_context(system_u:object_r:fortress_cache_t,s0)
+HOME_DIR/\.local/share/ai-fortress(/.*)?    gen_context(system_u:object_r:fortress_cache_t,s0)
+HOME_DIR/\.local/state/ai-fortress(/.*)?    gen_context(system_u:object_r:fortress_cache_t,s0)
