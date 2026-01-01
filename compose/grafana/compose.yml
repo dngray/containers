@@ -1,11 +1,15 @@
 name: grafana
 services:
   grafana:
-    image: docker.io/grafana/grafana:9.1.2-ubuntu
+    image: docker.io/grafana/grafana:12.3.1-ubuntu
     container_name: grafana
     hostname: grafana
     runtime: runsc-systrap
     restart: unless-stopped
+    ulimits:
+      nofile:
+          soft: 65536
+          hard: 65536
     cpus: 2
     mem_limit: 1g
     pids_limit: 512
