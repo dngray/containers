@@ -26,8 +26,7 @@ RUN tar xzf aerc.tar.gz --strip-components=1
 RUN gmake && gmake install PREFIX=~/.local
 
 # Build goimapnotify as the same user
-RUN go install gitlab.com/shackra/goimapnotify@latest
-
+RUN go install gitlab.com/shackra/goimapnotify@2.5.4
 
 # Stage 2: Final image
 FROM docker.io/debian:latest

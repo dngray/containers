@@ -97,3 +97,9 @@ allow container_t user_tmp_t:unix_stream_socket connectto;
 # Connect to host gpg-agent socket
 ###########################################
 allow container_t unconfined_t:unix_stream_socket connectto;
+
+###########################################
+# Downloads directory (~/Downloads)
+###########################################
+allow container_t user_home_t:dir { read write getattr search add_name remove_name };
+allow container_t user_home_t:file { open read write getattr append create };
