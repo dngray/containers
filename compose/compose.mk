@@ -24,6 +24,7 @@ all-up: stepca harbor mumble
 	sudo ${CMD} compose --env-file compose/.env -f compose/wg2_usenet/compose.yml up -d
 	sudo ${CMD} compose --env-file compose/.env -f compose/wg3_general/compose.yml up -d
 	sudo ${CMD} compose --env-file compose/.env -f compose/beets/compose.yml up -d
+	sudo ${CMD} compose --env-file compose/.env -f compose/navidrome/compose.yml up -d
 	sudo ${CMD} compose --env-file compose/.env -f compose/vaultwarden/compose.yml up -d
 	sudo ${CMD} compose --env-file compose/.env -f compose/vault/compose.yml up -d
 	sudo ${CMD} compose --env-file compose/.env -f compose/syncthing/compose.yml up -d

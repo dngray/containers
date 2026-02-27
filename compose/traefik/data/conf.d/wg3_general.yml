@@ -12,6 +12,11 @@ http:
       loadBalancer:
         servers:
           - url: http://172.22.0.2:80
+    navidrome:
+      loadBalancer:
+        servers:
+          - url: http://172.22.0.2:4533
+
   routers:
     vaultwarden-secure:
       rule: Host(`bitwarden.{{ env "domain" }}`)
@@ -43,3 +48,13 @@ http:
       tls:
         certResolver: stepca
       service: cinny@file
+    navidrome-secure:
+      rule: Host(`navidrome.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - secure-headers@file
+      tls:
+        certResolver: stepca
+      service: navidrome@file
