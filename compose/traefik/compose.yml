@@ -46,6 +46,7 @@ services:
       - grafana_frontend
       - vault_frontend
       - harbor_harbor
+      - btdirect_frontend
 
 networks:
   wg1_qbt_frontend:
@@ -77,4 +78,7 @@ networks:
     external: true
   harbor_harbor:
     name: harbor_harbor
+    external: true
+  btdirect_frontend:
+    name: btdirect_frontend
     external: true
