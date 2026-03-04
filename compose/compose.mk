@@ -30,6 +30,7 @@ all-up: stepca harbor mumble
 	sudo ${CMD} compose --env-file compose/.env -f compose/syncthing/compose.yml up -d
 	sudo ${CMD} compose --env-file compose/.env -f compose/smb/compose.yml up -d
 	sudo ${CMD} compose --env-file compose/.env -f compose/flexo/compose.yml up -d
+	sudo ${CMD} compose --env-file compose/.env -f compose/btdirect/compose.yml up -d
 	sudo ${CMD} compose --env-file compose/.env --env-file compose/powerwall/.env \
 		-f compose/powerwall/compose.yml up -d
 	sudo ${CMD} compose --env-file compose/.env -f compose/grafana/compose.yml up -d

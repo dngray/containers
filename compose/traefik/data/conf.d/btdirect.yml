@@ -1,0 +1,18 @@
+http:
+  services:
+    btdirect:
+      loadBalancer:
+        servers:
+          - url: http://172.32.0.2:8081
+
+  routers:
+    btdirect-secure:
+      rule: Host(`btdirect.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - btdirect-secure-headers@file
+      tls:
+        certResolver: stepca
+      service: btdirect@file

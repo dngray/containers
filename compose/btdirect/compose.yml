@@ -1,0 +1,42 @@
+name: btdirect
+services:
+  btdirect:
+    image: lscr.io/linuxserver/qbittorrent
+    container_name: btdirect
+    runtime: runsc-systrap
+    restart: unless-stopped
+    cpus: 2
+    mem_limit: 4g
+    pids_limit: 1024
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_READ_SEARCH
+      - SETUID
+      - SETGID
+    environment:
+      - PUID=1003
+      - PGID=1003
+      - WEBUI_PORT=8081
+    volumes:
+      - /opt/appdata/btdirect:/config
+      - /mnt/shared/incoming:/mnt/shared/incoming
+      - /mnt/shared/movies:/mnt/shared/movies
+      - /mnt/shared/tv:/mnt/shared/tv
+    ports:
+      - "26210:26210/tcp"
+      - "26210:26210/udp"
+    networks:
+      frontend:
+        ipv4_address: 172.32.0.2
+
+networks:
+  frontend:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 172.32.0.0/16
+        - subnet: fd32:1::/48
