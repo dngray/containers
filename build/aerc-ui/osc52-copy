@@ -1,0 +1,18 @@
+#!/bin/sh
+# Read the entire incoming stream from aerc into a variable
+input_data=$(cat)
+
+# Check if the input looks like HTML code
+if echo "$input_data" | grep -iqE "(<html|<doctype html|<body|<div)"; then
+  # If HTML, strip tags using w3m (or swap out with 'pandoc -f html -t plain')
+  clean_text=$(echo "$input_data" | w3m -T text/html -dump)
+else
+  # If already plain text, keep it as is
+  clean_text="$input_data"
+fi
+
+# Strip network carriage returns (\r), encode to base64, and remove newlines
+buf=$(echo "$clean_text" | tr -d '\r' | base64 | tr -d '\n')
+
+# Output the OSC 52 sequence directly to your host's foot terminal
+printf "\033]52;c;%s\a" "$buf" >/dev/tty

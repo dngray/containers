@@ -46,21 +46,55 @@ docker-list)
 
 # ── Local Hardened Workstation Targets (Podman/Rootless) ──
 aerc)
-  zellij --layout "${CONTAINER_REPO_PATH}/layouts/aerc-fortress.kdl" \
-    options \
+  info "==> Stabilizing Aerc Mail Pod Architecture..."
+  # Explicitly kick off the foundational network pod namespace service first
+  systemctl --user start aerc-mail-pod.service
+  systemctl --user start aerc-ui.service aerc-sync.service
+
+  printf "Waiting for aerc-ui container to verify execution context..."
+  until [ "$(podman container inspect -f '{{.State.Running}}' aerc-ui 2>/dev/null)" = "true" ]; do
+    printf "."
+    sleep 0.5
+  done
+  printf " Live!\n"
+
+  zellij --layout "${CONTAINER_REPO_PATH}/layouts/aerc-fortress.kdl" options \
     --mouse-mode true \
     --mouse-click-through true \
     --copy-on-select false \
     --pane-frames false
-  # "${CONTAINER_REPO_PATH}/run/aerc/aerc.sh" run
   ;;
 aerc-build) "${CONTAINER_REPO_PATH}/run/aerc/aerc.sh" build ;;
 aerc-clean) "${CONTAINER_REPO_PATH}/run/aerc/aerc.sh" clean ;;
+aerc-down)
+  info "==> Gracefully tearing down Aerc Mail Pod Architecture..."
+  # Stopping the pod infrastructure service cascades down and safely kills all child containers
+  systemctl --user stop aerc-mail-pod.service
+  systemctl --user reset-failed
+  info "==> Mail Fortress Offline."
+  ;;
+
+aerc-selinux-cil)
+  "${CONTAINER_REPO_PATH}/bin/build-selinux" \
+    "container_aerc" \
+    "${CONTAINER_REPO_PATH}/run/aerc" \
+    "${CONTAINER_REPO_PATH}/build/aerc"
+
+  printf '\n%b\n' "  ${BOLD}Next steps for live testing:${NC}"
+  info "  sudo semodule -i ${CONTAINER_REPO_PATH}/build/aerc/container_aerc.cil"
+  info "  sudo restorecon -RFv ${HOME}/.config/aerc"
+  ;;
+
 aerc-selinux-rpm)
+  info "==> Step 1: Triggering CIL compilation payload for Aerc..."
+  "$0" aerc-selinux-cil >/dev/null
+
+  info "==> Step 2: Staging asset into RPM creator for Aerc..."
+  # Feeds the newly cleaned build paths straight to the create-rpm engine
   "${CONTAINER_REPO_PATH}/bin/create-rpm" \
     "${CONTAINER_REPO_PATH}/run/aerc/container_aerc.spec" \
     "${CONTAINER_REPO_PATH}/build/aerc/rpm" \
-    "${CONTAINER_REPO_PATH}/run/aerc/container_aerc.te"
+    "${CONTAINER_REPO_PATH}/build/aerc/container_aerc.cil"
   ;;
 
 neovim-build) "${CONTAINER_REPO_PATH}/bin/debian-build-neovim" build ;;
@@ -158,7 +192,8 @@ template)
   item "template" "Compile Go-template configurations using global gomplate schema"
 
   printf '%b\n' "  ${CYAN}Desktop Apps (Podman/Secureblue):${NC}"
-  item "aerc" "Open mail client"
+  item "aerc" "Open mail client cluster pod"
+  item "aerc-down" "Tear down and stop the entire mail pod service mesh"
   item "crowdin" "Run translation tool interactive shell"
   item "davmail" "Start Exchange mail gateway proxy"
   item "imapfilter" "Run imapfilter sorting script"
@@ -184,7 +219,7 @@ template)
   printf '%b\n' "  ${CYAN}SELinux Policies:${NC}"
   item "fortress-selinux-cil" "Build fortress SELinux policy module (.cil)"
   item "fortress-selinux-rpm" "Build fortress SELinux policy RPM package"
-  item "aerc-selinux-pp" "Build split Aerc SELinux policy module (.pp)"
+  item "aerc-selinux-cil" "Build split Aerc SELinux policy module (.cil)"
   item "aerc-selinux-rpm" "Build split Aerc SELinux policy RPM package"
   item "snapclient-selinux-cil" "Build snapclient SELinux policy module (.cil)"
   item "snapclient-selinux-rpm" "Build snapclient SELinux policy RPM package"

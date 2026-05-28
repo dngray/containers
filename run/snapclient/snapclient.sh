@@ -3,7 +3,8 @@ set -e
 
 . "${CONTAINER_REPO_PATH}/lib/colors.sh"
 
-SNAPCLIENT_IMG="localhost/snapclient:latest"
+SNAPCLIENT_IMG="${REG_URL:-localhost}/library/snapclient:latest"
+PUBLISH_IMG="${REG_URL}/library/snapclient:latest"
 
 case "$1" in
 build)

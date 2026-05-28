@@ -39,6 +39,8 @@ FROM docker.io/debian:latest
 ARG HOST_UID
 ARG HOST_GID
 
+ENV COLORTERM=truecolor
+ENV TERM=xterm-256color
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Boost compilation speeds by utilizing cached layers for keyring tools up front
@@ -76,8 +78,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         khard \
         less \
         libsixel-bin \
+        libnotify-bin \
         man \
         msmtp \
+        netcat-openbsd \
         notmuch \
         pandoc \
         safecat \
@@ -101,6 +105,13 @@ RUN chmod -R a+rx /home/aerc \
     && chmod -R a+rx /home/aerc/.local/bin \
     && chmod -R a+rw /home/aerc/.local/state \
     && chown -R aerc:aerc /home/aerc
+
+COPY build/aerc-ui/osc52-copy /usr/local/bin/osc52-copy
+COPY build/aerc-ui/maildrive-split /usr/local/bin/maildrive-split
+
+# Final global permission setting for injected execution utilities
+RUN chmod +x /usr/local/bin/osc52-copy /usr/local/bin/maildrive-split \
+    && chown -R aerc:aerc /usr/local/bin/osc52-copy /usr/local/bin/maildrive-split
 
 ENV PATH=/home/aerc/.local/bin:${PATH} LANG=C.UTF-8
 WORKDIR /home/aerc
