@@ -28,7 +28,7 @@ run)
     --name imapfilter \
     --cap-add=IPC_LOCK \
     -e VAULT_ADDR \
-    "localhost/${IMAGE_TAG}"
+    "${REG_URL:-localhost}/${IMAGE_TAG}"
   ;;
 
 clean)

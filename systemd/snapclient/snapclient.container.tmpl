@@ -8,7 +8,7 @@ Restart=on-failure
 RestartSec=5
 
 [Container]
-Image=localhost/snapclient:latest
+Image=registry.{{ .container_data.docker.domain }}/library/snapclient:latest
 AutoUpdate=local
 Network=host
 SecurityLabelType=snapclient_t
