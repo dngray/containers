@@ -1,10 +1,20 @@
 layout {
-    pane name="Aerc" {
-        command "bash"
-        args "-c" "${CONTAINER_REPO_PATH}/run/aerc/aerc.sh run"
-        focus true
+    pane size=1 borderless=true {
+        plugin location="zellij:tab-bar"
     }
-
+    // A single unified stack group containing both of your mail views
+    pane name="Aerc Workspace" stacked=true {
+        // Active Mail Client with pseudo-TTY flags (-it) passed cleanly for mouse support
+        pane name="Aerc Mailbox" focus=true {
+            command "podman"
+            args "exec" "-it" "aerc-ui" "/home/aerc/.local/bin/aerc"
+        }
+        // Collapsible Log View that stays minimized at the bottom
+        pane name="Aerc Sync Logs" {
+            command "podman"
+            args "logs" "-f" "aerc-sync"
+        }
+    }
     pane size=1 borderless=true {
         plugin location="zellij:status-bar"
     }
