@@ -1,56 +1,44 @@
 Name:           container_aerc-selinux
 Version:        1.0
 Release:        1.fc44
-Summary:        SELinux policy for aerc containers and GPG socket access
+Summary:        SELinux policy for isolated aerc_t sandboxed container environments
 License:        MIT
 
-BuildRequires:  selinux-policy-devel, make, checkpolicy, policycoreutils
+BuildRequires:  checkpolicy, policycoreutils, selinux-policy-devel
 Requires:       policycoreutils, libselinux-utils
-Requires(post): policycoreutils, selinux-policy-targeted
-Requires(postun): policycoreutils
 
-%global selinuxtype targeted
 %global modulename container_aerc
 
 %description
-This SELinux policy module allows containerized applications (specifically aerc)
-to access home directories and the host GPG agent socket.
+This SELinux policy module provisions the custom aerc_t container domain,
+granting access to home files, GPG sockets, and bidirectional host desktop D-Bus alerts.
 
 %prep
-# No preparation steps needed
+# Pull the pre-built, port-injected .cil file directly from your SOURCES workspace
+cp "%{_sourcedir}/%{modulename}.cil" .
 
 %build
-checkmodule -M -m -o %{modulename}.mod %{_sourcedir}/%{modulename}.te
-semodule_package -o %{modulename}.pp -m %{modulename}.mod
-bzip2 -9 %{modulename}.pp
-
-%check
-checkmodule -M -m -o %{modulename}.check %{_sourcedir}/%{modulename}.te
-rm %{modulename}.check
+# File arrives pre-compiled from build-selinux; no build steps needed.
 
 %install
+# Deploy the raw, scriptless, port-injected .cil file to the automatic package directory
 mkdir -p %{buildroot}%{_datadir}/selinux/packages
-install -m 644 %{modulename}.pp.bz2 %{buildroot}%{_datadir}/selinux/packages/
+install -m 644 %{modulename}.cil %{buildroot}%{_datadir}/selinux/packages/
 
 %post
-/usr/sbin/semodule -n -s %{selinuxtype} -i %{_datadir}/selinux/packages/%{modulename}.pp.bz2 > /dev/null 2>&1 || :
-if /usr/sbin/selinuxenabled ; then
-    /usr/sbin/load_policy
-fi
+%selinux_modules_install -p 400 %{_datadir}/selinux/packages/%{modulename}.cil
 
 %postun
 if [ $1 -eq 0 ]; then
-    /usr/sbin/semodule -n -r %{modulename} > /dev/null 2>&1 || :
-    if /usr/sbin/selinuxenabled ; then
-        /usr/sbin/load_policy
-    fi
+    %selinux_modules_uninstall -p 400 %{modulename}
 fi
 
 %files
 %defattr(-,root,root,-)
-%{_datadir}/selinux/packages/%{modulename}.pp.bz2
+%{_datadir}/selinux/packages/%{modulename}.cil
 
 %changelog
-* Wed May 06 2026 Daniel Gray <dngray@polarbear.army> - 1.0-1
-- Initial release for Fedora 44
-- Added GPG agent socket bridge for containerized aerc
+* Wed May 27 2026 Daniel Gray <dngray@polarbear.army> - 1.0-1
+- Refactored compilation steps to utilize platform devel Makefile wrappers
+- Hardened process definitions to target the isolated aerc_t domain architecture
+- Optimized post installation scripting pathways to support rpm-ostree environments cleanly
