@@ -20,7 +20,7 @@ run)
     -v "${HOME}/.local/lib/davmail/tokens.properties:/davmail/tokens.properties:z" \
     -v "${HOME}/.local/log/davmail/davmail.log:/davmail/davmail.log:z" \
     --name davmail \
-    localhost/davmail:latest /davmail/davmail.properties
+    ${REG_URL:-localhost}/davmail:latest /davmail/davmail.properties
   ;;
 
 clean)
