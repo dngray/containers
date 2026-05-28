@@ -1,0 +1,32 @@
+#!/bin/sh
+# maildrive-split: Atomic message splitter for aerc mbox and single-message streams
+
+RAW_DIR="$1"
+TARGET_DIR=$(echo "$RAW_DIR" | tr -d '\r' | xargs)
+
+if [ -z "$TARGET_DIR" ]; then
+  echo "Usage: maildrive-split <parent-maildir-path>" >&2
+  exit 1
+fi
+
+if [ ! -d "$TARGET_DIR/tmp" ] || [ ! -d "$TARGET_DIR/new" ]; then
+  echo "Error: '$TARGET_DIR' is not a valid Maildir (missing tmp or new)" >&2
+  exit 2
+fi
+
+awk -v t="$TARGET_DIR/tmp" -v n="$TARGET_DIR/new" '
+    NR == 1 && !/^From \?\?\?@\?\?\?/ {
+        cmd = "safecat " t " " n;
+    }
+    /^From \?\?\?@\?\?\?/ {
+        if (cmd) close(cmd);
+        cmd = "safecat " t " " n;
+        next;
+    }
+    {
+        if (cmd) print | cmd;
+    }
+    END {
+        if (cmd) close(cmd);
+    }
+'

@@ -1,105 +1,181 @@
-module container_aerc 1.0;
+policy_module(container_aerc, 1.0.0)
 
-require {
+gen_require(`
+    type container_runtime_t;
     type container_t;
+    type pasta_t;
     type user_home_t;
     type config_home_t;
-    type data_home_t;
-    type gconf_home_t;
-    type gpg_secret_t;
     type home_bin_t;
     type user_tmp_t;
+    type session_dbusd_tmp_t;
     type unconfined_t;
-    class dir { read write add_name remove_name getattr search watch setattr create };
+    type null_device_t;
+    type proc_t;
+    type sysfs_t;
+    type cgroup_t;
+    type gpg_secret_t;
+    type devtty_t;
+    type cpu_online_t;
+    type pcscd_t;
+    type urandom_device_t;
+    type unconfined_dbusd_t;
+    type container_file_t;
+    type data_home_t;
+    type gconf_home_t;
+    type pcscd_var_run_t;
+    type pop_port_t;
+    type smtp_port_t;
+    type http_port_t;
+    role system_r;
+
+    # Explicitly register the complete process and character device hardware classes
+    class process { transition dyntransition fork signal signull sigkill getattr setkeycreate setsched noatsecure rlimitinh siginh execmem };
+    class chr_file { read write open getattr ioctl append };
+    class dir { read write add_name remove_name getattr search watch setattr create open };
     class file { read write execute open getattr link unlink create append map rename lock execute_no_trans setattr ioctl };
-    class lnk_file { read };
-    class sock_file { write };
-    class unix_stream_socket { connectto };
-    class process { fork exec };
-}
+    class lnk_file { read write create unlink getattr };
+    # Fix: Added complete socket operation hooks to match your local GPG requirements
+    class sock_file { read write create open getattr setattr unlink };
+    class unix_stream_socket { connectto read write };
+    class dbus { send_msg };
+    class tcp_socket { create connect write read name_connect };
+    class key { create };
+    class cap_userns { dac_override dac_read_search };
+    class fifo_file { write read open getattr };
+')
+
+# Define custom container execution domain
+type aerc_t;
+role system_r types aerc_t;
+virt_sandbox_domain(aerc_t)
+
+# Define your dedicated mail data label type
+type aerc_data_t;
+files_type(aerc_data_t)
 
 ###########################################
-# Home files (~)
+# ⚙️ Host & Runtime Service Management
+# Unified signaling and environment controls
 ###########################################
-allow container_t user_home_t:dir { read getattr search };
-allow container_t user_home_t:file { open read write getattr append create };
+# Authorize the container runtime engine (crun/conmon) to manage the entire process lifecycle
+allow container_runtime_t aerc_t:process { transition noatsecure rlimitinh siginh signal signull sigkill getattr };
+allow container_runtime_t aerc_t:dir { search read open getattr };
+allow container_runtime_t aerc_t:file { read open getattr };
+allow container_runtime_t aerc_t:key { create };
+allow container_runtime_t aerc_t:lnk_file { read getattr };
+allow unconfined_t aerc_t:dir { search read getattr open };
+
+# Authorize your unconfined host shell to interact with and forcefully stop/kill the container pod
+allow unconfined_t aerc_t:process { signal signull sigkill };
+
+# Internal container loop mechanics (permits process scaling within the sandbox itself)
+allow aerc_t self:process { setkeycreate setsched transition dyntransition fork signal signull sigkill getattr execmem };
+allow aerc_t container_runtime_t:fd use;
+allow aerc_t container_runtime_t:fifo_file { read write open getattr ioctl };
 
 ###########################################
-# Config files (~/.config)
+# 💻 Operating System Core & Pseudofs
 ###########################################
-allow container_t config_home_t:dir { read getattr search };
-allow container_t config_home_t:file { open read getattr };
-allow container_t config_home_t:file ioctl;
+allow aerc_t null_device_t:chr_file { read write open getattr append ioctl };
+allow aerc_t urandom_device_t:chr_file { read open getattr };
+allow aerc_t proc_t:file { read open getattr };
+allow aerc_t proc_t:lnk_file read;
+allow aerc_t sysfs_t:file { read open getattr };
+allow aerc_t cgroup_t:file { read open getattr };
+
+# Allow containers to safely lookup and read their own nested structures inside /proc
+allow aerc_t self:dir { search read open getattr };
+allow aerc_t self:file { read write open getattr };
+allow aerc_t self:lnk_file { read getattr };
+
+# Network capabilities for Goimapnotify and Mbsync via Pasta loopbacks
+allow pasta_t self:cap_userns { dac_override dac_read_search };
+allow aerc_t self:tcp_socket { create connect write read };
+allow aerc_t pop_port_t:tcp_socket name_connect;
+allow aerc_t smtp_port_t:tcp_socket name_connect;
+allow aerc_t http_port_t:tcp_socket name_connect;
+sysnet_dns_name_resolve(aerc_t)
 
 ###########################################
-# Executables (~/.local/bin)
+# 📺 Terminal Interactivity & CPU Scaling
 ###########################################
-allow container_t home_bin_t:file { open execute getattr read execute_no_trans };
+allow aerc_t devtty_t:chr_file { read write open getattr ioctl };
+allow aerc_t cpu_online_t:file { read open getattr };
 
 ###########################################
-# Data files (~/.local/share)
+# 🪪 YubiKey SmartCard Integration
 ###########################################
-allow container_t data_home_t:dir {
-    read
-    write
-    getattr
-    search
-    watch
-    add_name
-    remove_name
-    setattr
-    create
-};
-
-allow container_t data_home_t:file {
-    open
-    read
-    write
-    getattr
-    execute
-    append
-    create
-    map
-    rename
-    unlink
-    link
-    lock
-    setattr
-    ioctl
-};
-
-allow container_t data_home_t:lnk_file { read };
+# Allows the container to stream connections directly to the host smartcard daemon
+allow aerc_t pcscd_t:unix_stream_socket connectto;
+allow aerc_t pcscd_var_run_t:dir { search read getattr open };
+allow aerc_t pcscd_var_run_t:sock_file { read write open getattr };
 
 ###########################################
-# State files (~/.local/state)
+# 🪟 Graphical Pinentry Password Box Popups
+# (Cleaned up the duplicate section from your template here)
 ###########################################
-allow container_t gconf_home_t:dir { read write getattr search watch add_name remove_name };
-allow container_t gconf_home_t:file { open read write getattr append create lock rename unlink };
-allow container_t gconf_home_t:file ioctl;
-allow container_t gconf_home_t:file setattr;
+# Process-level: Allows unconfined execution handoffs without environment scrubbing
+allow aerc_t unconfined_t:process { transition rlimitinh siginh noatsecure };
+
+# IPC-level: Bypasses category barriers to let the broker draw the graphical dialog
+dbus_stub(aerc_t)
 
 ###########################################
-# GPG secrets (~/.gnupg)
+# 📁 Storage System Access Paths
 ###########################################
-allow container_t gpg_secret_t:dir { read write getattr search add_name remove_name };
-allow container_t gpg_secret_t:file { open read write getattr create append link unlink lock };
-allow container_t gpg_secret_t:sock_file write;
-allow container_t gpg_secret_t:unix_stream_socket connectto;
+# Base user profile directories (~)
+allow aerc_t user_home_t:dir { read getattr search };
+allow aerc_t data_home_t:dir { read write getattr search watch add_name remove_name setattr create open };
+allow aerc_t data_home_t:file { read write getattr open create append link unlink rename lock setattr map execute };
+
+# Fallback config profile lookups (~/.config)
+allow aerc_t config_home_t:dir { read getattr search };
+allow aerc_t config_home_t:file { open read getattr ioctl };
+
+# Container-internal script attachments (~/.local/bin)
+allow aerc_t home_bin_t:file { open execute getattr read execute_no_trans };
+
+# Allow mbsync lock files in ~/.local/state (Secureblue labels it gconf_home_t)
+allow aerc_t gconf_home_t:dir { read write getattr search watch add_name remove_name setattr create open };
+allow aerc_t gconf_home_t:file { read write getattr open create append link unlink rename lock setattr };
+
+# 🔒 Dedicated Mail Architecture Containment (Verifies aerc_data_t handles)
+allow aerc_t aerc_data_t:dir { read write getattr search watch add_name remove_name setattr create };
+allow aerc_t aerc_data_t:file { open read write getattr execute append create map rename unlink link lock setattr ioctl };
+allow aerc_t aerc_data_t:lnk_file { read write create unlink };
+
+# 🔐 Host Keyring Vaults (~/.gnupg structural permissions)
+allow aerc_t gpg_secret_t:dir { read write getattr search watch add_name remove_name setattr };
+allow aerc_t gpg_secret_t:file { open read write getattr create append link unlink lock };
+allow aerc_t gpg_secret_t:sock_file { read write create open getattr setattr unlink };
+allow aerc_t gpg_secret_t:unix_stream_socket connectto;
+
+# 📥 Downloads directory (~/Downloads attachment extraction)
+allow aerc_t user_home_t:dir { write add_name remove_name create setattr };
+allow aerc_t user_home_t:file { open read write getattr append create unlink rename setattr };
 
 ###########################################
-# /run/user/$UID sockets
+# 🔗 Loopback Service Interprocess Mesh
 ###########################################
-allow container_t user_tmp_t:dir { read getattr search };
-allow container_t user_tmp_t:sock_file write;
-allow container_t user_tmp_t:unix_stream_socket connectto;
+# Fix: Expanded user_tmp_t rules to grant full lockfile and socket lifecycle controls 
+# inside the mounted tmpfs /run/user/%U/gnupg directory sandbox.
+allow aerc_t user_tmp_t:dir { read write open getattr search watch add_name remove_name create setattr };
+allow aerc_t user_tmp_t:file { open read write getattr create append link unlink lock setattr };
+allow aerc_t user_tmp_t:sock_file { read write create open getattr setattr unlink };
 
-###########################################
-# Connect to host gpg-agent socket
-###########################################
-allow container_t unconfined_t:unix_stream_socket connectto;
+allow aerc_t session_dbusd_tmp_t:dir { search read getattr };
+allow aerc_t session_dbusd_tmp_t:sock_file write;
+allow aerc_t session_dbusd_tmp_t:unix_stream_socket connectto;
+allow aerc_t unconfined_t:unix_stream_socket { connectto read write };
+allow aerc_t unconfined_dbusd_t:unix_stream_socket connectto;
+allow aerc_t unconfined_dbusd_t:dbus send_msg;
 
-###########################################
-# Downloads directory (~/Downloads)
-###########################################
-allow container_t user_home_t:dir { read write getattr search add_name remove_name };
-allow container_t user_home_t:file { open read write getattr append create };
+allow aerc_t self:fifo_file { read write open getattr create unlink };
+allow aerc_t self:fd use;
+allow aerc_t self:tcp_socket { bind listen accept };
+
+corenet_tcp_bind_generic_node(aerc_t)
+corenet_tcp_bind_all_unreserved_ports(aerc_t)
+corenet_tcp_connect_all_unreserved_ports(aerc_t)
+unconfined_dbus_chat(aerc_t)

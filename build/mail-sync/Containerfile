@@ -1,0 +1,55 @@
+# Stage 1: Build / Runtime Environment Setup
+FROM docker.io/debian:trixie-slim
+
+# Securely export global host uid/gid bounds dynamically 
+ARG HOST_UID
+ARG HOST_GID
+
+# ── STEP 1: Boost compilation speeds by utilizing cached layers for keyring tools up front ──
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean; \
+    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        wget \
+    && wget -qO- https://packages.gopass.pw/repos/gopass/gopass-archive-keyring.gpg | tee /usr/share/keyrings/gopass-archive-keyring.gpg >/dev/null
+
+# ── STEP 2: Add the Gopass repository to sources.list ──
+RUN cat << EOF | tee /etc/apt/sources.list.d/gopass.sources
+Types: deb
+URIs: https://packages.gopass.pw/repos/gopass
+Suites: stable
+Architectures: all amd64 arm64 armhf
+Components: main
+Signed-By: /usr/share/keyrings/gopass-archive-keyring.gpg
+EOF
+
+# ── STEP 3: Install Core Headless Synchronization Utilities ──
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+        gnupg \
+        gopass \
+        isync \
+        libnotify-bin \
+        notmuch \
+        netcat-openbsd \
+    && groupadd -g ${HOST_GID} mail-sync \
+    && useradd --create-home --shell /bin/bash -u ${HOST_UID} -g ${HOST_GID} mail-sync
+
+# Switch down to the unprivileged service user perspective
+USER mail-sync
+WORKDIR /home/mail-sync
+
+# Copy the listener to the home workspace path
+COPY --chmod=0755 build/mail-sync/sync-listener.sh /home/mail-sync/sync-listener.sh
+
+# Fix: Move the execution script straight into the absolute binary directory path
+USER root
+COPY --chmod=0755 build/mail-sync/container-email-sync /usr/local/bin/container-email-sync
+USER mail-sync
+
+# Hold port 12345 open persistently inside the loopback namespace
+EXPOSE 12345
+ENTRYPOINT ["/home/mail-sync/sync-listener.sh"]
