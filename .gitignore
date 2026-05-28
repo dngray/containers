@@ -1,3 +1,5 @@
+build/aerc-ui/nvim-linux-x86_64.deb
+build/aerc/container_aerc.cil
 build/aerc/nvim-linux-x86_64.deb
 build/aerc/rpm
 build/ai_fortress/ai_fortress.cil

@@ -1,0 +1,53 @@
+#!/bin/sh
+ACTION="$1"
+
+MBSYNC_OPTS=""
+if [ "$SYNC_DEBUG" = "1" ]; then
+  echo "[DEBUG Mode] Forcing zero-write simulation parameters..."
+  MBSYNC_OPTS="--dry-run -V"
+fi
+
+case "$ACTION" in
+sync-inbox)
+  echo "Syncing inboxes..."
+  mbsync inboxes $MBSYNC_OPTS
+
+  if [ "$SYNC_DEBUG" != "1" ]; then
+    echo "Indexing new messages..."
+    NOTMUCH_OUT=""
+    for p in /home/mail-sync/.config/notmuch/*; do
+      if [ -d "$p" ] && [ -f "$p/config" ]; then
+        # Fix: Force notmuch to read the exact, absolute profile configuration file path directly
+        NOTMUCH_OUT="$NOTMUCH_OUT $(notmuch --config="$p/config" new)"
+      fi
+    done
+
+    if echo "$NOTMUCH_OUT" | grep -q "Added"; then
+      notify-send "Mail Fortress" "New messages received and indexed!" --icon=mail-unread
+    fi
+  fi
+  ;;
+
+sync-all)
+  echo "Starting Full Mailbox Sync..."
+  mbsync -a $MBSYNC_OPTS
+
+  if [ "$SYNC_DEBUG" = "1" ]; then
+    echo "[DEBUG Mode] Skipping notmuch indexing loop to preserve disk state."
+  else
+    echo "Updating all notmuch profiles..."
+    NOTMUCH_OUT=""
+    for p in /home/mail-sync/.config/notmuch/*; do
+      if [ -d "$p" ] && [ -f "$p/config" ]; then
+        # Fix: Point the indexer straight to the numerical subfolder config targets
+        NOTMUCH_OUT="$NOTMUCH_OUT $(notmuch --config="$p/config" new)"
+      fi
+    done
+
+    if echo "$NOTMUCH_OUT" | grep -q "Added"; then
+      notify-send "Mail Fortress" "Full account synchronization complete. New mail added!" --icon=mail-unread
+    fi
+  fi
+  echo "Sync complete!"
+  ;;
+esac
