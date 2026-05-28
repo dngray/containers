@@ -1,0 +1,11 @@
+# run/aerc/container_aerc.fc
+
+HOME_DIR/\.local/share/mail(/.*)?          gen_context(system_u:object_r:aerc_data_t,s0)
+HOME_DIR/\.local/share/address-book(/.*)?  gen_context(system_u:object_r:aerc_data_t,s0)
+HOME_DIR/\.local/share/calendars(/.*)?     gen_context(system_u:object_r:aerc_data_t,s0)
+
+HOME_DIR/\.local/state/vdirsyncer(/.*)?    gen_context(system_u:object_r:aerc_data_t,s0)
+HOME_DIR/\.local/state/isync(/.*)?         gen_context(system_u:object_r:aerc_data_t,s0)
+
+HOME_DIR/\.config/aerc(/.*)?               gen_context(system_u:object_r:aerc_data_t,s0)
+HOME_DIR/\.config/goimapnotify(/.*)?       gen_context(system_u:object_r:aerc_data_t,s0)
