@@ -9,14 +9,11 @@ services:
     environment:
       - PUID=1000
       - PGID=1000
-    volumes:
-      - /home/${U1}/.config/syncthing/:/config
-{{- range $paths := index .container_data.docker.syncthing_server.instance_1.paths }}
-      - {{ . }}
-{{- end }}
     ports:
       - 127.0.0.1:8384:8384
       - 22000:22000
+    volumes:
+      - /home/${U1}/.config/syncthing/:/config
     networks:
       1_frontend:
         ipv4_address: 172.24.0.2
@@ -30,14 +27,11 @@ services:
     environment:
       - PUID=1001
       - PGID=1001
-    volumes:
-      - /home/${U2}/.config/syncthing/:/config
-{{- range $paths := index .container_data.docker.syncthing_server.instance_2.paths }}
-      - {{ . }}
-{{- end }}
     ports:
       - 127.0.0.1:8385:8384
       - 22001:22000
+    volumes:
+      - /home/${U2}/.config/syncthing/:/config
     networks:
       2_frontend:
         ipv4_address: 172.25.0.2

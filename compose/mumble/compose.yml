@@ -1,24 +1,18 @@
 name: mumble
 services:
   mumble:
+    extends:
+      file: ../_common/app.yml
+      service: app
     image: docker.io/mumblevoip/mumble-server:latest
     container_name: mumble
-    runtime: runsc-systrap
-    restart: unless-stopped
     user: 1104:1104
-    cpus: 2
-    mem_limit: 8g
-    pids_limit: 2048
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
     env_file: mumble.env
+    ports:
+      - 64738:64738
     volumes:
       - /opt/appdata/mumble/data:/data:rw
       - /opt/appdata/mumble/certificates:/certificates:rw
-    ports:
-      - 64738:64738
     networks:
       frontend:
         ipv4_address: 172.31.0.2
