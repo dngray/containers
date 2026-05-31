@@ -18,7 +18,7 @@ compose/powerwall/data/telegraf.conf
 compose/powerwall/data/weather411.conf
 compose/rss/miniflux.env
 compose/smb/config.yml
-compose/syncthing/compose.yml
+compose/syncthing/volumes.yml
 compose/traefik/data/traefik.env
 compose/traefik/data/traefik.yml
 compose/vaultwarden/vault.env
