@@ -1,0 +1,48 @@
+services:
+  app:
+    runtime: runsc-systrap
+    restart: unless-stopped
+    cpus: 2
+    mem_limit: 2g
+    pids_limit: 1024
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  linuxserver-app:
+    extends:
+      file: app.yml
+      service: app
+    cap_add:
+      - CHOWN
+      - DAC_READ_SEARCH
+      - SETUID
+      - SETGID
+    environment:
+      - PUID=1003
+      - PGID=1003
+
+  wireguard-app:
+    runtime: runc
+    restart: unless-stopped
+    cpus: 2
+    mem_limit: 2g
+    pids_limit: 1024
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - ALLOWED_SUBNETS=${NETWORK}/24
+
+  app-runc:
+    runtime: runc
+    restart: unless-stopped
+    cpus: 2
+    mem_limit: 2g
+    pids_limit: 1024
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
