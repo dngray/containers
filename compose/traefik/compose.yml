@@ -1,6 +1,9 @@
 name: traefik
 services:
   traefik:
+    extends:
+      file: ../_common/app.yml
+      service: app
     build:
       context: ../../build/traefik
       dockerfile: Dockerfile
@@ -8,33 +11,22 @@ services:
     image: localhost/traefik
     # image: docker.io/traefik
     hostname: traefik
-    runtime: runsc-systrap
-    restart: unless-stopped
     read_only: true
-    mem_limit: 8g
-    pids_limit: 2048
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
     user: 1003:1003
+    environment:
+      - LEGO_CA_CERTIFICATES=/etc/traefik/certs/root.crt
+      - domain=${DOMAIN}
+    env_file: ./data/traefik.env
     ports:
       - 8675:8675
       - 80:8080
       - 443:4430
       - 443:4430/udp
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=http_network
     volumes:
       - ./data/traefik.yml:/etc/traefik/traefik.yml
       - ./data/conf.d:/etc/traefik/conf.d:ro
       - /opt/appdata/traefik/acme.json:/etc/acme/acme.json:rw
       - /opt/appdata/traefik/certs:/etc/traefik/certs:ro
-    env_file: ./data/traefik.env
-    environment:
-      - LEGO_CA_CERTIFICATES=/etc/traefik/certs/root.crt
-      - domain=${DOMAIN}
     networks:
       - wg1_qbt_frontend
       - wg2_usenet_frontend
@@ -48,6 +40,10 @@ services:
       - harbor_harbor
       - caddy_frontend
       - music_frontend
+
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=http_network
 
 networks:
   wg1_qbt_frontend:
