@@ -1,0 +1,132 @@
+Network Architecture Map
+=======================
+Last updated: 2026-06-01
+
+All services use per-project internal networks (172.20-34.0.0/16) plus
+the shared traefik edge proxy network (172.20.0.0/24).
+
+Services using network_mode: service:<parent> share the parent's network
+stack and are reached via the parent's hostname/IP.
+
+
+SHARED TRAEFIK NETWORK (172.20.0.0/24)
+--------------------------------------
+Managed by manage-compose.sh _init_traefik_network().
+Static IPs for runsc-systrap containers caused AddressAlreadyInUse errors;
+they now use auto-assigned (DHCP) IPs. Only runc containers keep static IPs.
+
+  STATIC:
+  172.20.0.1   gateway (Docker bridge)
+  172.20.0.2   wg1        (wg1_qbt,     runtime: runc)
+  172.20.0.3   wg2        (wg2_usenet,  runtime: runc)
+  172.20.0.4   wg3        (wg3_general, runtime: runc)
+
+  AUTO (no static IP — assigned by Docker IPAM):
+  syncthing1   (syncthing,  runtime: runsc-systrap)
+  syncthing2   (syncthing,  runtime: runsc-systrap)
+  pypowerwall  (powerwall,  runtime: runsc-systrap)
+  grafana      (powerwall,  runtime: runsc-systrap)
+  vault        (vault,      runtime: runsc-systrap)
+  flexo        (flexo,      runtime: runsc-systrap)
+  mpd          (music,      runtime: runc — app-runc, auto IP)
+
+
+PER-PROJECT NETWORKS
+--------------------
+
+wg1_qbt      172.21.0.0/16  (fd21:1::/48)
+  frontend   172.21.0.2    wg1          wireguard (VPN gateway)
+              network_mode service:wg1  qbittorrent  (port 8081)
+
+wg2_usenet   172.22.0.0/16  (fd22:1::/48)
+  frontend   172.22.0.2    wg2          wireguard (VPN gateway)
+              network_mode service:wg2  sabnzbd   (port 6767)
+              network_mode service:wg2  sonarr    (port 8989)
+              network_mode service:wg2  radarr    (port 7878)
+              network_mode service:wg2  lidarr    (port 8686)
+              network_mode service:wg2  prowlarr  (port 9696)
+
+wg3_general  172.23.0.0/16  (fd23:1::/48)
+  frontend   172.23.0.2    wg3          wireguard (VPN gateway)
+              network_mode service:wg3  vaultwarden (port 8558)
+              network_mode service:wg3  beets       (port 8337)
+              network_mode service:wg3  cinny       (port 80)
+              network_mode service:wg3  navidrome   (port 4533)
+              network_mode service:wg3  miniflux    (port 8080)
+
+syncthing    172.24.0.0/16  (fd24:1::/48)
+  frontend   172.24.0.2    syncthing1   (port 8384)
+             172.24.0.3    syncthing2   (port 8384)
+
+vault        172.25.0.0/16  (fd25:1::/48)
+  frontend   172.25.0.2    vault        (port 8200)
+
+flexo        172.26.0.0/16  (fd26:1::/48)
+  frontend   172.26.0.2    flexo        (port 9898)
+
+powerwall    172.28.0.0/16  (fd28:2::/48)
+  pypowerwall 172.28.0.2   pypowerwall  (port 8675)
+              ----         172.29.0.0/16  (fd29:1::/48)
+  influxdb    172.29.0.2   influxdb     (port 8086)
+  (no IP)                  telegraf
+  (no IP)                  weather411
+  (no IP on per-project)   grafana      (port 9000, traefik net only)
+
+harbor       172.30.0.0/16  (gateway: 172.30.0.1)
+  harbor    172.30.0.100   nginx/proxy  (port 8080)
+  (no static IPs)          harbor-log, registry, registryctl, harbor-db,
+                           harbor-core, harbor-portal, harbor-jobservice, redis
+
+music        172.31.0.0/16  (fd31:1::/48)
+  frontend   172.31.0.2    mpd          (port 8080, 1780 via cyp/snapcast)
+              network_mode service:mpd  cyp        (port 8080)
+              network_mode service:mpd  snapcast   (port 1780)
+
+btdirect     172.32.0.0/16  (fd32:1::/48)
+  frontend   172.32.0.2    btdirect     (port 8081)
+
+caddy        172.33.0.0/16  (fd33:1::/48)
+  frontend   172.33.0.2    caddy        (port 8080)
+
+mumble       172.34.0.0/16  (fd34:1::/48)
+  frontend   172.34.0.2    mumble       (port 64738, no Traefik routing)
+
+
+SERVICES WITHOUT ROUTABLE STATIC IPs
+------------------------------------
+These extend 'app' profile and use default bridge or no network config:
+  stepca       (Traefik uses as certResolver — no HTTP routing needed)
+  rss/miniflux (behind wg3 via VPN)
+  vaultwarden  (behind wg3 via VPN)
+  beets        (behind wg3 via VPN)
+  cinny        (behind wg3 via VPN)
+  navidrome    (behind wg3 via VPN)
+  samba        (app-runc, no Traefik routing)
+
+
+TRAEFIK DNS ROUTING (conf.d/*.yml)
+----------------------------------
+Service         URL                     Port
+-------         ---                     ----
+beets           http://wg3:8337         VPN (wg3_general)
+btdirect        http://btdirect:8081    LAN
+caddy           http://caddy:8080       LAN
+cinny           http://wg3:80           VPN (wg3_general)
+flexo           http://flexo:9898       LAN
+grafana         http://grafana:9000     LAN
+harbor          http://proxy:8080       LAN (Harbor nginx)
+miniflux        http://wg3:8080         VPN (wg3_general)
+mpd/cyp         http://mpd:8080         LAN
+navidrome       http://wg3:4533         VPN (wg3_general)
+pypowerwall     http://pypowerwall:8675 LAN
+qbittorrent     http://wg1:8081         VPN (wg1_qbt)
+sabnzbd         http://wg2:6767         VPN (wg2_usenet)
+snapcast/snapweb http://mpd:1780        LAN
+sonarr          http://wg2:8989         VPN (wg2_usenet)
+radarr          http://wg2:7878         VPN (wg2_usenet)
+lidarr          http://wg2:8686         VPN (wg2_usenet)
+prowlarr        http://wg2:9696         VPN (wg2_usenet)
+syncthing1      http://syncthing1:8384  LAN
+syncthing2      http://syncthing2:8384  LAN
+vault           http://vault:8200       LAN
+vaultwarden     http://wg3:8558         VPN (wg3_general)

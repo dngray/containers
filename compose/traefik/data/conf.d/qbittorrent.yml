@@ -9,7 +9,7 @@ http:
     qbittorrent:
       loadBalancer:
         servers:
-          - url: http://172.20.0.2:8081
+          - url: http://wg1:8081
 
   routers:
     qbittorrent-secure:

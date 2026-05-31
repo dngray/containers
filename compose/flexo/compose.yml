@@ -17,6 +17,7 @@ services:
     networks:
       frontend:
         ipv4_address: 172.26.0.2
+      traefik:
 
 networks:
   frontend:
@@ -25,3 +26,5 @@ networks:
       config:
         - subnet: 172.26.0.0/16
         - subnet: fd26:1::/48
+  traefik:
+    external: true
