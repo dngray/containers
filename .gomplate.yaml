@@ -17,7 +17,7 @@ inputFiles:
   - /input/compose/powerwall/data/weather411.conf.tmpl
   - /input/compose/rss/miniflux.env.tmpl
   - /input/compose/smb/config.yml.tmpl
-  - /input/compose/syncthing/compose.yml.tmpl
+  - /input/compose/syncthing/volumes.yml.tmpl
   - /input/compose/traefik/data/traefik.env.tmpl
   - /input/compose/traefik/data/traefik.yml.tmpl
   - /input/compose/vaultwarden/vault.env.tmpl
@@ -37,7 +37,7 @@ outputFiles:
   - /output/compose/powerwall/data/weather411.conf
   - /output/compose/rss/miniflux.env
   - /output/compose/smb/config.yml
-  - /output/compose/syncthing/compose.yml
+  - /output/compose/syncthing/volumes.yml
   - /output/compose/traefik/data/traefik.env
   - /output/compose/traefik/data/traefik.yml
   - /output/compose/vaultwarden/vault.env

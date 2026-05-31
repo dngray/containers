@@ -1,24 +1,18 @@
 name: grafana
 services:
   grafana:
+    extends:
+      file: ../_common/app.yml
+      service: app
     image: docker.io/grafana/grafana:12.3.1-ubuntu
     container_name: grafana
     hostname: grafana
-    runtime: runsc-systrap
-    restart: unless-stopped
+    read_only: true
+    user: 2003:2003
     ulimits:
       nofile:
-          soft: 65536
-          hard: 65536
-    cpus: 2
-    mem_limit: 1g
-    pids_limit: 512
-    read_only: true
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    user: 2003:2003
+        soft: 65536
+        hard: 65536
     env_file: grafana.env
     volumes:
       - /opt/appdata/grafana/:/var/lib/grafana
