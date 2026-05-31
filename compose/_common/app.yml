@@ -34,7 +34,10 @@ services:
     cap_add:
       - NET_ADMIN
     environment:
-      - ALLOWED_SUBNETS=${NETWORK}/24
+      - PUID=1003
+      - PGID=1003
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
 
   app-runc:
     runtime: runc

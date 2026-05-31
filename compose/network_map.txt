@@ -104,6 +104,10 @@ These extend 'app' profile and use default bridge or no network config:
   samba        (app-runc, no Traefik routing)
 
 
+wg4_test      172.35.0.0/16  (TEMPORARY — VPN migration testing)
+  (default project bridge)   wg4          wireguard (test tunnel)
+               network_mode service:wg4  wg4-test (busybox, exec to check VPN)
+
 TRAEFIK DNS ROUTING (conf.d/*.yml)
 ----------------------------------
 Service         URL                     Port
