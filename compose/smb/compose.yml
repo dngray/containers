@@ -1,18 +1,11 @@
 name: samba
 services:
   samba:
+    extends:
+      file: ../_common/app.yml
+      service: app-runc
     image: docker.io/crazymax/samba
     container_name: samba
-    network_mode: host
-    runtime: runc
-    restart: unless-stopped
-    cpus: 2
-    mem_limit: 1g
-    pids_limit: 512
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
     cap_add:
       - CHOWN
       - DAC_OVERRIDE
@@ -21,10 +14,11 @@ services:
       - NET_RAW
       - SETUID
       - SETGID
+    environment:
+      - SAMBA_LOG_LEVEL=0
     volumes:
       - ./config.yml:/data/config.yml
       - /home/${U1}:/samba/${U1}
       - /home/${U2}:/samba/${U2}
       - /mnt/shared:/samba/shared
-    environment:
-      - SAMBA_LOG_LEVEL=0
+    network_mode: host

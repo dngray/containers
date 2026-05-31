@@ -8,40 +8,28 @@ services:
       sh -c 'printf "1. %bDAC_OVERRIDE%b capability is required when adding a torrent from the command line with %bqbittorrent-nox --add-paused=true%b, otherwise you get %bQtLockedFile::lock(): file is not opened%b error.\n2. When using %brunsc%b need to set the Network Interface, eg Options > Advanced > Network Interface: wg0 (or tun0 with OpenVPN). Each restart this will need to be flicked to one of the other options and back to your interface of choice.\n" "\033[32m" "\033[0m" "\033[32m" "\033[0m" "\033[32m" "\033[0m" "\033[32m" "\033[0m"'
 
   btdirect:
+    extends:
+      file: ../_common/app.yml
+      service: linuxserver-app
     image: lscr.io/linuxserver/qbittorrent
     container_name: btdirect
-    runtime: runsc-systrap
-    restart: unless-stopped
-    depends_on:
-      pre-flight-notices:
-        condition: service_completed_successfully
-    cpus: 2
-    mem_limit: 4g
-    pids_limit: 1024
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    cap_add:
-      - CHOWN
-      - DAC_READ_SEARCH
-      - SETUID
-      - SETGID
     environment:
-      - PUID=1003
-      - PGID=1003
       - WEBUI_PORT=8081
+    ports:
+      - "26210:26210/tcp"
+      - "26210:26210/udp"
     volumes:
       - /opt/appdata/btdirect:/config
       - /mnt/shared/incoming:/mnt/shared/incoming
       - /mnt/shared/movies:/mnt/shared/movies
       - /mnt/shared/tv:/mnt/shared/tv
-    ports:
-      - "26210:26210/tcp"
-      - "26210:26210/udp"
     networks:
       frontend:
         ipv4_address: 172.32.0.2
+
+    depends_on:
+      pre-flight-notices:
+        condition: service_completed_successfully
 
 networks:
   frontend:

@@ -1,28 +1,20 @@
 name: wg3_general
 services:
   wg3:
+    extends:
+      file: ../_common/app.yml
+      service: wireguard-app
     image: ghcr.io/wfg/wireguard
     container_name: wg3
     hostname: wg3
-    runtime: runc
-    restart: unless-stopped
-    cpus: 4
-    mem_limit: 8g
-    pids_limit: 2048
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_ADMIN
-    environment:
-      - ALLOWED_SUBNETS=${NETWORK}/24
-    volumes:
-      - /opt/appdata/wireguard/${WG3}.conf:/etc/wireguard/wg0.conf
     ports:
       - 127.0.0.1:8558:8558
       - 127.0.0.1:8337:8337
       - 127.0.0.1:4533:4533
       - 127.0.0.1:8083:80
       - 127.0.0.1:8080:8080
+    volumes:
+      - /opt/appdata/wireguard/${WG3}.conf:/etc/wireguard/wg0.conf
     networks:
       frontend:
         ipv4_address: 172.22.0.2

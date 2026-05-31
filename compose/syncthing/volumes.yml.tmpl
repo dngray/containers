@@ -1,0 +1,11 @@
+services:
+  syncthing1:
+    volumes:
+{{- range $paths := index .container_data.docker.syncthing_server.instance_1.paths }}
+      - {{ . }}
+{{- end }}
+  syncthing2:
+    volumes:
+{{- range $paths := index .container_data.docker.syncthing_server.instance_2.paths }}
+      - {{ . }}
+{{- end }}
