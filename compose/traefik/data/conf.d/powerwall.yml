@@ -3,11 +3,11 @@ http:
     grafana:
       loadBalancer:
         servers:
-          - url: http://172.27.0.2:9000
+          - url: http://grafana:9000
     pypowerwall:
       loadBalancer:
         servers:
-          - url: http://172.28.0.2:8675
+          - url: http://pypowerwall:8675
   routers:
     grafana-secure:
       rule: Host(`grafana.{{ env "domain" }}`)
@@ -15,6 +15,7 @@ http:
         - https
       middlewares:
         - hsts-headers@file
+        - secure-headers@file
         - grafana-secure-headers@file
       tls:
         certResolver: stepca
@@ -26,7 +27,7 @@ http:
         - pypw_secure
       middlewares:
         - hsts-headers@file
-        - grafana-secure-headers@file
+        - pypowerwall-secure-headers@file
       tls:
         certResolver: stepca
       service: pypowerwall@file
