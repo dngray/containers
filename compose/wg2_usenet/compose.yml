@@ -1,52 +1,44 @@
 name: wg2_usenet
 services:
   wg2:
+    extends:
+      file: ../_common/app.yml
+      service: wireguard-app
     image: ghcr.io/wfg/wireguard
     container_name: wg2
     hostname: wg2
-    runtime: runc
-    restart: unless-stopped
-    cpus: 2
-    mem_limit: 4g
-    pids_limit: 1024
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_ADMIN
-    environment:
-      - ALLOWED_SUBNETS=${NETWORK}/24
-    volumes:
-      - /opt/appdata/wireguard/${WG2}.conf:/etc/wireguard/wg0.conf:ro
     ports:
       - 127.0.0.1:6767:6767/tcp
       - 127.0.0.1:8989:8989/tcp
       - 127.0.0.1:7878:7878/tcp
       - 127.0.0.1:8686:8686/tcp
       - 127.0.0.1:9696:9696/tcp
+    volumes:
+      - /opt/appdata/wireguard/${WG2}.conf:/etc/wireguard/wg0.conf:ro
     networks:
       frontend:
         ipv4_address: 172.21.0.2
 
   sabnzbd:
     extends:
-      file: usenet_common.yml
-      service: usenet_apps
+      file: ../_common/app.yml
+      service: linuxserver-app
     image: lscr.io/linuxserver/sabnzbd:latest
     container_name: sabnzbd
-    network_mode: service:wg2
     volumes:
       - /opt/appdata/sabnzbd:/config
       - /mnt/shared/usenet/watch:/mnt/shared/usenet/watch
       - /mnt/shared/usenet/incoming:/mnt/shared/usenet/incoming
       - /mnt/shared/usenet/completed:/mnt/shared/usenet/completed
 
+    network_mode: service:wg2
+
   sonarr:
     extends:
-      file: usenet_common.yml
-      service: usenet_apps
+      file: ../_common/app.yml
+      service: linuxserver-app
     image: lscr.io/linuxserver/sonarr:latest
     container_name: sonarr
-    network_mode: service:wg2
     volumes:
       - /opt/appdata/sonarr:/config
       - /mnt/shared/tv:/mnt/shared/tv
@@ -54,13 +46,14 @@ services:
       - /mnt/shared/usenet/incoming:/mnt/shared/usenet/incoming
       - /mnt/shared/usenet/completed:/mnt/shared/usenet/completed
 
+    network_mode: service:wg2
+
   radarr:
     extends:
-      file: usenet_common.yml
-      service: usenet_apps
+      file: ../_common/app.yml
+      service: linuxserver-app
     image: lscr.io/linuxserver/radarr:latest
     container_name: radarr
-    network_mode: service:wg2
     volumes:
       - /opt/appdata/radarr:/config
       - /mnt/shared/movies:/mnt/shared/movies
@@ -68,13 +61,14 @@ services:
       - /mnt/shared/usenet/incoming:/mnt/shared/usenet/incoming
       - /mnt/shared/usenet/completed:/mnt/shared/usenet/completed
 
+    network_mode: service:wg2
+
   lidarr:
     extends:
-      file: usenet_common.yml
-      service: usenet_apps
+      file: ../_common/app.yml
+      service: linuxserver-app
     image: lscr.io/linuxserver/lidarr:latest
     container_name: lidarr
-    network_mode: service:wg2
     volumes:
       - /opt/appdata/lidarr:/config
       - /mnt/shared/music/library:/mnt/shared/music/library
@@ -82,15 +76,18 @@ services:
       - /mnt/shared/usenet/incoming:/mnt/shared/usenet/incoming
       - /mnt/shared/usenet/completed:/mnt/shared/usenet/completed
 
+    network_mode: service:wg2
+
   prowlarr:
     extends:
-      file: usenet_common.yml
-      service: usenet_apps
+      file: ../_common/app.yml
+      service: linuxserver-app
     image: lscr.io/linuxserver/prowlarr:latest
     container_name: prowlarr
-    network_mode: service:wg2
     volumes:
       - /opt/appdata/prowlarr:/config
+
+    network_mode: service:wg2
 
 networks:
   frontend:
