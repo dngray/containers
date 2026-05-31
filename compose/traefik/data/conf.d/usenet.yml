@@ -3,27 +3,23 @@ http:
     sabnzbd:
       loadBalancer:
         servers:
-          - url: http://172.21.0.2:6767
-
+          - url: http://wg2:6767
     sonarr:
       loadBalancer:
         servers:
-          - url: http://172.21.0.2:8989
-
+          - url: http://wg2:8989
     radarr:
       loadBalancer:
         servers:
-          - url: http://172.21.0.2:7878
-
+          - url: http://wg2:7878
     lidarr:
       loadBalancer:
         servers:
-          - url: http://172.21.0.2:8686
-
+          - url: http://wg2:8686
     prowlarr:
       loadBalancer:
         servers:
-          - url: http://172.21.0.2:9696
+          - url: http://wg2:9696
   routers:
     sabnzbd-secure:
       rule: Host(`sabnzbd.{{ env "domain" }}`)

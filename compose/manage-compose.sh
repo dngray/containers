@@ -10,7 +10,7 @@ ENV_FILE="compose/.env"
 
 # Deploy stages: wireguard tunnels (serial), independent services (parallel), edge proxy (serial)
 SERVICES_STAGE1="stepca wg1_qbt wg2_usenet wg3_general"
-SERVICES_STAGE2="beets caddy cinny flexo grafana harbor mumble music navidrome powerwall rss samba syncthing vault vaultwarden"
+SERVICES_STAGE2="beets caddy cinny flexo harbor mumble music powerwall rss smb syncthing vault vaultwarden"
 SERVICES_STAGE3="traefik"
 
 # Privileged Handler Function: Prioritizes sudo over run0
@@ -30,22 +30,39 @@ run_compose() {
   _action="$2"
   _extra_action_flags="$3"
   _extra_files=""
+  _extra_env=""
 
   case "$_service" in
-    syncthing) _extra_files="-f ${CONTAINER_REPO_PATH}/compose/syncthing/volumes.yml" ;;
+  syncthing) _extra_files="-f ${CONTAINER_REPO_PATH}/compose/syncthing/volumes.yml" ;;
+  powerwall) _extra_env="--env-file ${CONTAINER_REPO_PATH}/compose/powerwall/data/compose.env" ;;
   esac
 
   info "==> Deploying infrastructure layer: ${_service}..."
   set -- run_privileged "${CMD}" compose --env-file "${CONTAINER_REPO_PATH}/${ENV_FILE}" \
-    -f "${CONTAINER_REPO_PATH}/compose/${_service}/compose.yml" $_extra_files "${_action}"
+    $_extra_env -f "${CONTAINER_REPO_PATH}/compose/${_service}/compose.yml" $_extra_files "${_action}"
   [ -n "$_extra_action_flags" ] && set -- "$@" "$_extra_action_flags"
   "$@" -d
+}
+
+# Create shared traefik proxy network once (idempotent)
+_init_traefik_network() {
+  if ! run_privileged "${CMD}" network ls -q -f name=^traefik$ 2>/dev/null | grep -q .; then
+    info "==> Creating shared edge proxy network: traefik..."
+    run_privileged "${CMD}" network create \
+      --driver bridge \
+      --subnet 172.20.0.0/24 \
+      --ip-range 172.20.0.0/24 \
+      --label "com.docker.compose.network=traefik" \
+      traefik
+  fi
 }
 
 # Deploy all stages: stage 1 serial, stage 2 parallel, stage 3 serial
 _deploy_all() {
   _action="$1"
   _extra_action_flags="${2:-}"
+
+  _init_traefik_network
 
   for service in $SERVICES_STAGE1; do
     run_compose "${service}" "${_action}" "${_extra_action_flags}"
