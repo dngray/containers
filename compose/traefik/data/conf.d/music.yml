@@ -3,12 +3,11 @@ http:
     cyp:
       loadBalancer:
         servers:
-          - url: http://172.34.0.2:8080
-
+          - url: http://mpd:8080
     snapweb:
       loadBalancer:
         servers:
-          - url: http://172.34.0.2:1780
+          - url: http://mpd:1780
 
   routers:
     cyp-secure:

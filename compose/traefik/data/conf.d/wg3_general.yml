@@ -3,23 +3,23 @@ http:
     vaultwarden:
       loadBalancer:
         servers:
-          - url: http://172.22.0.2:8558
+          - url: http://wg3:8558
     beets:
       loadBalancer:
         servers:
-          - url: http://172.22.0.2:8337
+          - url: http://wg3:8337
     cinny:
       loadBalancer:
         servers:
-          - url: http://172.22.0.2:80
+          - url: http://wg3:80
     navidrome:
       loadBalancer:
         servers:
-          - url: http://172.22.0.2:4533
+          - url: http://wg3:4533
     miniflux:
       loadBalancer:
         servers:
-          - url: http://172.22.0.2:8080
+          - url: http://wg3:8080
 
   routers:
     vaultwarden-secure:

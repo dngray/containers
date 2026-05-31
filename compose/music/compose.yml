@@ -28,7 +28,8 @@ services:
       - /opt/appdata/mpd/pipe:/audio
     networks:
       frontend:
-        ipv4_address: 172.34.0.2
+        ipv4_address: 172.31.0.2
+      traefik:
 
   snapcast:
     build:
@@ -65,5 +66,7 @@ networks:
     enable_ipv6: true
     ipam:
       config:
-        - subnet: 172.34.0.0/16
-        - subnet: fd34:1::/48
+        - subnet: 172.31.0.0/16
+        - subnet: fd31:1::/48
+  traefik:
+    external: true
