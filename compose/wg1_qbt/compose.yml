@@ -11,13 +11,13 @@ services:
     extends:
       file: ../_common/app.yml
       service: wireguard-app
-    image: ghcr.io/wfg/wireguard
+    image: lscr.io/linuxserver/wireguard:latest
     container_name: wg1
     hostname: wg1
     ports:
       - 127.0.0.1:8081:8081
     volumes:
-      - /opt/appdata/wireguard/${WG1}.conf:/etc/wireguard/wg0.conf
+      - /opt/appdata/wireguard/${WG1}.conf:/config/wg_confs/wg0.conf
     networks:
       frontend:
         ipv4_address: 172.21.0.2
