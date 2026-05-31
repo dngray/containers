@@ -15,8 +15,9 @@ services:
     volumes:
       - /home/${U1}/.config/syncthing/:/config
     networks:
-      1_frontend:
+      frontend:
         ipv4_address: 172.24.0.2
+      traefik:
 
   syncthing2:
     extends:
@@ -33,19 +34,16 @@ services:
     volumes:
       - /home/${U2}/.config/syncthing/:/config
     networks:
-      2_frontend:
-        ipv4_address: 172.25.0.2
+      frontend:
+        ipv4_address: 172.24.0.3
+      traefik:
 
 networks:
-  1_frontend:
+  frontend:
     enable_ipv6: true
     ipam:
       config:
         - subnet: 172.24.0.0/16
         - subnet: fd24:1::/48
-  2_frontend:
-    enable_ipv6: true
-    ipam:
-      config:
-        - subnet: 172.25.0.0/16
-        - subnet: fd25:1::/48
+  traefik:
+    external: true
