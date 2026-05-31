@@ -20,6 +20,8 @@ services:
       - /opt/appdata/wireguard/${WG1}.conf:/etc/wireguard/wg0.conf
     networks:
       frontend:
+        ipv4_address: 172.21.0.2
+      traefik:
         ipv4_address: 172.20.0.2
 
     depends_on:
@@ -50,5 +52,7 @@ networks:
     enable_ipv6: true
     ipam:
       config:
-        - subnet: 172.20.0.0/16
-        - subnet: fd20:1::/48
+        - subnet: 172.21.0.0/16
+        - subnet: fd21:1::/48
+  traefik:
+    external: true

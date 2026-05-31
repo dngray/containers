@@ -17,7 +17,9 @@ services:
       - /opt/appdata/wireguard/${WG2}.conf:/etc/wireguard/wg0.conf:ro
     networks:
       frontend:
-        ipv4_address: 172.21.0.2
+        ipv4_address: 172.22.0.2
+      traefik:
+        ipv4_address: 172.20.0.3
 
   sabnzbd:
     extends:
@@ -94,5 +96,7 @@ networks:
     enable_ipv6: true
     ipam:
       config:
-        - subnet: 172.21.0.0/16
-        - subnet: fd21:1::/48
+        - subnet: 172.22.0.0/16
+        - subnet: fd22:1::/48
+  traefik:
+    external: true
