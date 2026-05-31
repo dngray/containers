@@ -8,8 +8,10 @@ set -e
 CMD="${CMD:-docker}"
 ENV_FILE="compose/.env"
 
-# Definitive single-source order for cluster deployment
-SERVICES="stepca harbor mumble wg1_qbt wg2_usenet wg3_general beets rss vaultwarden vault syncthing smb flexo cinny powerwall grafana caddy music traefik"
+# Deploy stages: wireguard tunnels (serial), independent services (parallel), edge proxy (serial)
+SERVICES_STAGE1="stepca wg1_qbt wg2_usenet wg3_general"
+SERVICES_STAGE2="beets caddy cinny flexo grafana harbor mumble music navidrome powerwall rss samba syncthing vault vaultwarden"
+SERVICES_STAGE3="traefik"
 
 # Privileged Handler Function: Prioritizes sudo over run0
 run_privileged() {
@@ -27,20 +29,42 @@ run_compose() {
   _service="$1"
   _action="$2"
   _extra_action_flags="$3"
+  _extra_files=""
+
+  case "$_service" in
+    syncthing) _extra_files="-f ${CONTAINER_REPO_PATH}/compose/syncthing/volumes.yml" ;;
+  esac
 
   info "==> Deploying infrastructure layer: ${_service}..."
   set -- run_privileged "${CMD}" compose --env-file "${CONTAINER_REPO_PATH}/${ENV_FILE}" \
-    -f "${CONTAINER_REPO_PATH}/compose/${_service}/compose.yml" "${_action}"
+    -f "${CONTAINER_REPO_PATH}/compose/${_service}/compose.yml" $_extra_files "${_action}"
   [ -n "$_extra_action_flags" ] && set -- "$@" "$_extra_action_flags"
   "$@" -d
+}
+
+# Deploy all stages: stage 1 serial, stage 2 parallel, stage 3 serial
+_deploy_all() {
+  _action="$1"
+  _extra_action_flags="${2:-}"
+
+  for service in $SERVICES_STAGE1; do
+    run_compose "${service}" "${_action}" "${_extra_action_flags}"
+  done
+
+  for service in $SERVICES_STAGE2; do
+    run_compose "${service}" "${_action}" "${_extra_action_flags}" &
+  done
+  wait
+
+  for service in $SERVICES_STAGE3; do
+    run_compose "${service}" "${_action}" "${_extra_action_flags}"
+  done
 }
 
 case "$1" in
 up-build)
   info "==> Rebuilding and bringing up all compose services..."
-  for service in $SERVICES; do
-    run_compose "${service}" "up" "--build"
-  done
+  _deploy_all "up" "--build"
   ok "✔ All compose service layers successfully rebuilt and established!"
   ;;
 
@@ -56,9 +80,7 @@ music-build)
 
 all-up)
   warn "Bootstrapping application matrix containers..."
-  for service in $SERVICES; do
-    run_compose "${service}" "up" ""
-  done
+  _deploy_all "up" ""
   ok "✔ All cluster service layers successfully established!"
   ;;
 
