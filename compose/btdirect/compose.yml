@@ -26,10 +26,7 @@ services:
     networks:
       frontend:
         ipv4_address: 172.32.0.2
-
-    depends_on:
-      pre-flight-notices:
-        condition: service_completed_successfully
+      traefik:
 
 networks:
   frontend:
@@ -38,3 +35,5 @@ networks:
       config:
         - subnet: 172.32.0.0/16
         - subnet: fd32:1::/48
+  traefik:
+    external: true
