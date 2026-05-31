@@ -3,7 +3,7 @@ http:
     flexo:
       loadBalancer:
         servers:
-          - url: http://172.26.0.2:9898
+          - url: http://flexo:9898
 
   routers:
     flexo-secure:

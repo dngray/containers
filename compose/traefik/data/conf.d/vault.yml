@@ -3,7 +3,7 @@ http:
     vault:
       loadBalancer:
         servers:
-          - url: http://172.23.0.2:8200
+          - url: http://vault:8200
 
   routers:
     vault-secure:
