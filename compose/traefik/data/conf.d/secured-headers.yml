@@ -13,6 +13,12 @@ http:
 
     grafana-secure-headers:
       headers:
+        frameDeny: false
+        accesscontrolalloworiginlist:
+          - https://grafana.{{ env "domain" }}
+
+    pypowerwall-secure-headers:
+      headers:
         sslRedirect: true
         browserXssFilter: false
         contentTypeNosniff: true

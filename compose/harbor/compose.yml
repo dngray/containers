@@ -238,6 +238,7 @@ services:
     networks:
       harbor:
         ipv4_address: 172.30.0.100
+      traefik:
     depends_on:
       - registry
       - core
@@ -248,6 +249,7 @@ services:
       options:
         syslog-address: "tcp://localhost:1514"
         tag: "proxy"
+
 networks:
   harbor:
     enable_ipv6: false
@@ -255,3 +257,5 @@ networks:
       config:
         - subnet: 172.30.0.0/16
           gateway: 172.30.0.1
+  traefik:
+    external: true

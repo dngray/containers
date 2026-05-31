@@ -3,7 +3,7 @@ http:
     harbor:
       loadBalancer:
         servers:
-          - url: http://172.30.0.100:8080
+          - url: http://proxy:8080
         passHostHeader: true
 
   routers:

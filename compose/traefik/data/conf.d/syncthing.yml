@@ -3,11 +3,11 @@ http:
     syncthing1:
       loadBalancer:
         servers:
-          - url: http://172.24.0.2:8384
+          - url: http://syncthing1:8384
     syncthing2:
       loadBalancer:
         servers:
-          - url: http://172.25.0.2:8384
+          - url: http://syncthing2:8384
   routers:
     syncthing1-secure:
       rule: Host(`syncthing1.{{ env "domain" }}`)

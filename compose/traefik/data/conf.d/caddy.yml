@@ -3,7 +3,7 @@ http:
     caddy:
       loadBalancer:
         servers:
-          - url: http://172.33.0.2:8080
+          - url: http://caddy:8080
 
   routers:
     caddy-secure:

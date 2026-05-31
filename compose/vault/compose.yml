@@ -23,7 +23,8 @@ services:
       - /opt/appdata/vault/data:/vault/data:rw
     networks:
       frontend:
-        ipv4_address: 172.23.0.2
+        ipv4_address: 172.25.0.2
+      traefik:
 
     entrypoint: vault server -config=/vault/config/vault.hcl
 
@@ -32,5 +33,7 @@ networks:
     enable_ipv6: true
     ipam:
       config:
-        - subnet: 172.23.0.0/16
-        - subnet: fd23:1::/48
+        - subnet: 172.25.0.0/16
+        - subnet: fd25:1::/48
+  traefik:
+    external: true
