@@ -96,7 +96,7 @@ RUN --mount=type=bind,source=build/opencode/cache,target=/mnt/host_cache,rw,Z,U 
 RUN --mount=type=bind,source=build/opencode/cache,target=/mnt/host_cache,rw,Z,U \
     export HOME=/mnt/host_cache/bun && \
     export BUN_INSTALL_CACHE_DIR=$HOME/.bun/install/cache && \
-    HUSKY=0 bun run --cwd packages/opencode fix-node-pty && \
+    HUSKY=0 bun run --cwd packages/core fix-node-pty && \
     HUSKY=0 bun x turbo run build --filter=opencode --concurrency 1 && \
     mkdir -p /out && \
     cp packages/opencode/dist/opencode-linux-x64/bin/opencode /out/opencode
