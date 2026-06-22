@@ -20,10 +20,10 @@ layout {
                     command "bash"
                     args "-c" "ai-secure opencode; exec bash"
                 }
-                // Active interactive window (Waits slightly for server boot, fully environment-aware)
+                // Active interactive window (Pure Bash /dev/tcp socket connection test)
                 pane name="OpenCode TUI" {
                     command "bash"
-                    args "-c" "sleep 1 && ai-secure shell"
+                    args "-c" "until (echo > /dev/tcp/127.0.0.1/4096) >/dev/null 2>&1; do sleep 0.1; done; ai-secure shell"
                     focus true
                 }
             }
