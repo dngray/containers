@@ -14,3 +14,19 @@ services:
       - 9000:9000
     volumes:
       - /opt/appdata/stepca:/home/step:rw
+
+  stepca-rsa:
+    extends:
+      file: ../_common/app.yml
+      service: app
+    image: docker.io/smallstep/step-ca
+    container_name: stepca-rsa
+    read_only: true
+    cap_add:
+      - NET_BIND_SERVICE
+    user: 2006:2006
+    ports:
+      - 9001:9001
+    volumes:
+      - /opt/appdata/stepca-rsa:/home/step:rw
+    restart: unless-stopped
