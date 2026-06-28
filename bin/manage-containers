@@ -99,6 +99,9 @@ aerc-selinux-rpm)
 
 neovim-build) "${CONTAINER_REPO_PATH}/bin/debian-build-neovim" build ;;
 neovim-build-clean) "${CONTAINER_REPO_PATH}/bin/debian-build-neovim" clean ;;
+neovim-parsers-update) "${CONTAINER_REPO_PATH}/run/neovim/treesitter.sh" update ;;
+neovim-parsers-build) "${CONTAINER_REPO_PATH}/run/neovim/treesitter.sh" build ;;
+neovim-parsers-clean) "${CONTAINER_REPO_PATH}/run/neovim/treesitter.sh" clean ;;
 snapclient-build) "${CONTAINER_REPO_PATH}/run/snapclient/snapclient.sh" build ;;
 snapclient-clean) "${CONTAINER_REPO_PATH}/run/snapclient/snapclient.sh" clean ;;
 
@@ -197,6 +200,9 @@ template)
   item "crowdin" "Run translation tool interactive shell"
   item "davmail" "Start Exchange mail gateway proxy"
   item "imapfilter" "Run imapfilter sorting script"
+  item "neovim-parsers-build" "Build custom micro-compiler image for Treesitter"
+  item "neovim-parsers-update" "Execute synchronous Tree-sitter compilation cascade"
+  item "neovim-parsers-clean" "Remove Treesitter compiler image layers"
 
   printf '%b\n' "  ${CYAN}Build Desktop Apps:${NC}"
   item "neovim-build" "Build Neovim deb package from source"
