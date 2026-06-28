@@ -1,0 +1,7 @@
+FROM registry.fedoraproject.org/fedora-minimal:latest
+
+# Strictly install the compiler, the editor binary, and tar
+RUN dnf5 install -y gcc-c++ neovim tar && dnf5 clean all
+
+# The cleanest, zero-assumption entrypoint possible
+ENTRYPOINT ["/bin/sh", "-c"]
