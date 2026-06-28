@@ -4,7 +4,7 @@ build/aerc/nvim-linux-x86_64.deb
 build/aerc/rpm
 build/ai_fortress/ai_fortress.cil
 build/ai_fortress/rpm
-build/neovim
+build/neovim/nvim-linux-x86_64.deb
 build/opencode/cache
 build/opencode/roots.pem
 build/snapclient/container_snapclient.cil
