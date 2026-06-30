@@ -3,11 +3,7 @@ policy_module(ai_fortress, 1.0)
 gen_require(`
     type container_runtime_t;
     type container_file_t;
-    type node_t;
-    type proc_t;
-    type cgroup_t;
     type sysfs_t;
-    type tmpfs_t;
     class process2 nnp_transition;
 ')
 
@@ -42,27 +38,27 @@ virt_sandbox_domain(fortress_agent_t)
 allow container_runtime_t fortress_agent_t:process2 { nnp_transition };
 
 ########################################
-# THE NETWORK & JIT
+# Network
 ########################################
 allow fortress_agent_t self:process { execmem fork signal_perms setsched };
 allow fortress_agent_t self:shm { create destroy read write };
 
-# Unified Network - TCP/UDP for Server (OpenCode) and Client (APIs)
+# TCP/UDP for server and client
 allow fortress_agent_t self: { tcp_socket udp_socket } { create_stream_socket_perms connect getattr setattr read write };
+allow fortress_agent_t self:tcp_socket { listen accept };
 
 # Bind for the OpenCode server, Connect for the TUI Client
 allow fortress_agent_t fortress_port_t:tcp_socket { name_bind name_connect };
 
-allow fortress_agent_t node_t: { tcp_socket udp_socket } node_bind;
-allow fortress_agent_t { node_t self }:tcp_socket { listen accept };
-
 sysnet_dns_name_resolve(fortress_agent_t)
 corenet_tcp_connect_http_port(fortress_agent_t)
+corenet_udp_bind_all_nodes(fortress_agent_t)
+corenet_tcp_bind_all_nodes(fortress_agent_t)
 
 ########################################
 # Internal Container File System Execution
 ########################################
-# This rule allows the engine to read and run its own embedded python/app layers
+# Read and execute container image files
 allow fortress_agent_t container_file_t:dir { list_dir_perms read open getattr search };
 allow fortress_agent_t container_file_t:file { read_file_perms execute map open getattr };
 allow fortress_agent_t container_file_t:lnk_file { read getattr };
@@ -71,20 +67,15 @@ allow fortress_agent_t container_file_t:lnk_file { read getattr };
 # Data Access
 ########################################
 
-# Handle the .local tmpfs mount (with map for pip3 fallback)
-allow fortress_agent_t tmpfs_t:dir { manage_dir_perms };
-allow fortress_agent_t tmpfs_t:file { manage_file_perms map execute };
-allow fortress_agent_t tmpfs_t:lnk_file { manage_lnk_file_perms };
+# Workspace source files
+allow fortress_agent_t fortress_src_t:dir { manage_dir_perms relabelfrom relabelto };
+allow fortress_agent_t fortress_src_t:file { manage_file_perms relabelfrom relabelto map ioctl execute };
+allow fortress_agent_t fortress_src_t:lnk_file { manage_lnk_file_perms relabelfrom relabelto };
 
 # Needed so uv can execute compiled wheels/binaries inside persistent cache folder
 allow fortress_agent_t fortress_cache_t:dir { manage_dir_perms relabelfrom relabelto };
 allow fortress_agent_t fortress_cache_t:file { manage_file_perms relabelfrom relabelto map ioctl execute };
 allow fortress_agent_t fortress_cache_t:lnk_file { manage_lnk_file_perms };
-
-# Workspace Access - Strict, explicit lock down to fortress_src_t paths only
-allow fortress_agent_t fortress_src_t:dir { manage_dir_perms relabelfrom relabelto };
-allow fortress_agent_t fortress_src_t:file { manage_file_perms relabelfrom relabelto map ioctl execute };
-allow fortress_agent_t fortress_src_t:lnk_file { manage_lnk_file_perms relabelfrom relabelto };
 
 # Fortress config persistence — read/write with map for mmap-based tools
 allow fortress_agent_t fortress_config_t:dir manage_dir_perms;
@@ -97,26 +88,30 @@ allowxperm fortress_agent_t {
     fortress_config_t
 }:file ioctl { 0x5401 0x5450 0x5451 0x5413 };
 
-# Resource Introspection (Fixes OpenCode EACCES on cpu.max/memory.max)
-dev_read_sysfs(fortress_agent_t)
-allow fortress_agent_t cgroup_t:dir list_dir_perms;
-allow fortress_agent_t cgroup_t:file read_file_perms;
-
 # Required for 'keep-id' and mapping
 allow fortress_agent_t self:cap_userns { fowner chown fsetid dac_override dac_read_search };
 
-# Allow creating transient symlinks inside containerized virtual environments
+# Transient symlinks for virtual environments
 allow fortress_agent_t self:lnk_file manage_lnk_file_perms;
 
 ########################################
-# Standard Infrastructure
+# Standard Infrastructure & Kernel Lookups
 ########################################
 userdom_use_user_terminals(fortress_agent_t)
+dev_read_sysfs(fortress_agent_t)
 
-allow fortress_agent_t proc_t:file { read getattr open };
+kernel_read_proc_symlinks(fortress_agent_t)
+kernel_read_system_state(fortress_agent_t)
+fs_read_cgroup_files(fortress_agent_t)
+
+# Handle the .local tmpfs mount (map + execute for pip3)
+fs_manage_tmpfs_dirs(fortress_agent_t)
+fs_manage_tmpfs_files(fortress_agent_t)
+allow fortress_agent_t tmpfs_t:file execute;
+
 allow fortress_agent_t self:fifo_file manage_fifo_file_perms;
 allow fortress_agent_t self:unix_stream_socket create_stream_socket_perms;
 
-# Connects container logging outputs safely back to your host runtime view / Zellij panes
+# Container runtime fd/fifo for logging
 allow fortress_agent_t container_runtime_t:fd use;
 allow fortress_agent_t container_runtime_t:fifo_file { read write append getattr ioctl };
