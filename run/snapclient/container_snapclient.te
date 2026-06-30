@@ -1,66 +1,67 @@
 policy_module(container_snapclient, 1.0.0)
 
 gen_require(`
-    type sound_device_t;
     type container_runtime_t;
     type container_file_t;
-    type user_tmp_t;
-    type pulseaudio_home_t;
-    type null_device_t;
-    type node_t;
-    type unreserved_port_t;
-    type urandom_device_t;
-    type random_device_t;
     type tmpfs_t;
-    type proc_t;
     type unconfined_t;
+    type sound_device_t;
+    type urandom_device_t;
+    type user_tmp_t;
     role system_r;
 
     class key { create };
     class process { transition noatsecure rlimitinh siginh fork signal signull };
     class fd use;
     class fifo_file { write ioctl };
-    class chr_file { read write open ioctl };
-    class udp_socket { create bind node_bind write read };
-    class tcp_socket { create connect shutdown read ioctl write name_connect };
-    class dir search;
     class file { read open getattr map write lock };
+    class dir { search read open getattr };
     class lnk_file read;
     class unix_stream_socket connectto;
+    class chr_file { read write open ioctl };
+    class sock_file { write read open getattr };
 ')
 
 type snapclient_t;
 role system_r types snapclient_t;
 virt_sandbox_domain(snapclient_t)
 
-allow container_runtime_t snapclient_t:key create;
-allow container_runtime_t snapclient_t:process { transition noatsecure rlimitinh siginh signal signull };
-allow container_runtime_t snapclient_t:dir search;
+# Internal & Self Process Rules
 allow snapclient_t self:process { fork signal };
 allow snapclient_t self:tcp_socket { create connect shutdown read ioctl write };
 allow snapclient_t self:udp_socket { create bind write read setopt };
-allow snapclient_t node_t:udp_socket node_bind;
-allow snapclient_t container_runtime_t:fd use;
-allow snapclient_t container_runtime_t:fifo_file { write ioctl };
-allow container_runtime_t snapclient_t:file { read open getattr };
-allow snapclient_t null_device_t:chr_file { read write open };
-allow snapclient_t sound_device_t:chr_file { read write open ioctl };
-allow snapclient_t unreserved_port_t:tcp_socket name_connect;
 allow snapclient_t self:dir { search read open };
 allow snapclient_t self:lnk_file read;
-allow snapclient_t proc_t:lnk_file read;
-allow snapclient_t urandom_device_t:chr_file { read open };
-allow snapclient_t random_device_t:chr_file { read open };
-allow snapclient_t tmpfs_t:file map;
+
+# Container runtime and image file access
+allow container_runtime_t snapclient_t:key create;
+allow container_runtime_t snapclient_t:process { transition noatsecure rlimitinh siginh signal signull };
+allow container_runtime_t snapclient_t:dir search;
+allow container_runtime_t snapclient_t:file { read open getattr };
+allow snapclient_t container_runtime_t:fd use;
+allow snapclient_t container_runtime_t:fifo_file { write ioctl };
 allow snapclient_t container_file_t:dir search;
 allow snapclient_t container_file_t:file { execute read open getattr execute_no_trans };
 allow snapclient_t container_file_t:lnk_file read;
-
-allow snapclient_t user_tmp_t:dir search;
-allow snapclient_t user_tmp_t:sock_file { write read open getattr };
-allow snapclient_t user_tmp_t:file { read open getattr };
-allow snapclient_t user_tmp_t:lnk_file read;
-allow snapclient_t pulseaudio_home_t:file { read write open getattr lock };
-allow snapclient_t pulseaudio_home_t:lnk_file read;
-
+allow snapclient_t tmpfs_t:file map;
 allow snapclient_t unconfined_t:unix_stream_socket connectto;
+
+# Kernel & Hardware Layer
+kernel_read_proc_symlinks(snapclient_t)
+allow snapclient_t sound_device_t:chr_file { read write open ioctl };
+dev_rw_null(snapclient_t)
+dev_read_rand(snapclient_t)
+
+# Network Layer
+corenet_udp_bind_all_nodes(snapclient_t)
+corenet_tcp_connect_all_unreserved_ports(snapclient_t)
+
+# PulseAudio/PipeWire client access
+pulseaudio_rw_home_files(snapclient_t)
+
+# Random seeding needs /dev/urandom access
+allow snapclient_t urandom_device_t:chr_file { read open };
+
+# PulseAudio/PipeWire UNIX socket streaming over /run/user paths
+allow snapclient_t user_tmp_t:dir { search read open getattr };
+allow snapclient_t user_tmp_t:sock_file { write read open getattr };
