@@ -1,0 +1,4 @@
+FROM debian:trixie-slim
+RUN apt-get update && apt-get install -y tftpd-hpa && rm -rf /var/lib/apt/lists/*
+EXPOSE 69/udp
+ENTRYPOINT ["/usr/sbin/in.tftpd", "--foreground", "--listen", "--user", "root", "--address", "0.0.0.0:69", "--secure", "/var/tftpboot"]
