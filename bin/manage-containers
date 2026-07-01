@@ -179,6 +179,22 @@ template)
     docker.io/hairyhenderson/gomplate --config=/input/.gomplate.yaml -V
   ;;
 
+# ── Local Hardened Workstation Targets (Podman/Rootless) ──
+tftp)
+  info "==> Launching Local TFTP Daemon..."
+  "${CONTAINER_REPO_PATH}/run/tftp/tftp.sh" run
+  ;;
+
+tftp-build)
+  info "==> Building Local Hardened TFTP Daemon Runtime..."
+  "${CONTAINER_REPO_PATH}/run/tftp/tftp.sh" build
+  ;;
+
+tftp-clean)
+  info "==> Force Purging Local TFTP Storage Images & Containers..."
+  "${CONTAINER_REPO_PATH}/run/tftp/tftp.sh" clean
+  ;;
+
 # ── High-Contrast Interactive Menu & Help Sheet ──
 *)
   printf '%b\n' "${BOLD}Lab Commands:${NC}"
@@ -229,6 +245,10 @@ template)
   item "aerc-selinux-rpm" "Build split Aerc SELinux policy RPM package"
   item "snapclient-selinux-cil" "Build snapclient SELinux policy module (.cil)"
   item "snapclient-selinux-rpm" "Build snapclient SELinux policy RPM package"
+  printf '%b\n' "  ${CYAN}Local Hardened Workstation Targets:${NC}"
+  item "tftp" "Start local TFTP daemon (rootful) on port 69/udp"
+  item "tftp-build" "Compile local tftpd-hpa execution image via Podman"
+  item "tftp-clean" "Force purge local tftp storage container and engine image"
 
   printf '\n%b\n' "${BOLD}💡 Quick Cheat Sheet Reference:${NC}"
   printf '%b\n' "  Follow logs trailing 50:  ${YELLOW}sudo docker logs --tail 50 --follow --timestamps <name>${NC}"
