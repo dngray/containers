@@ -1,0 +1,32 @@
+http:
+  services:
+    grafana:
+      loadBalancer:
+        servers:
+          - url: http://172.27.0.2:9000
+    pypowerwall:
+      loadBalancer:
+        servers:
+          - url: http://172.28.0.2:8675
+  routers:
+    grafana-secure:
+      rule: Host(`grafana.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - grafana-secure-headers@file
+      tls:
+        certResolver: stepca
+      service: grafana@file
+
+    pypowerwall-secure:
+      rule: Host(`grafana.{{ env "domain" }}`)
+      entryPoints:
+        - pypw_secure
+      middlewares:
+        - hsts-headers@file
+        - grafana-secure-headers@file
+      tls:
+        certResolver: stepca
+      service: pypowerwall@file

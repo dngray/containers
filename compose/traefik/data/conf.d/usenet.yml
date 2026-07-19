@@ -1,0 +1,81 @@
+http:
+  services:
+    sabnzbd:
+      loadBalancer:
+        servers:
+          - url: http://172.21.0.2:6767
+
+    sonarr:
+      loadBalancer:
+        servers:
+          - url: http://172.21.0.2:8989
+
+    radarr:
+      loadBalancer:
+        servers:
+          - url: http://172.21.0.2:7878
+
+    lidarr:
+      loadBalancer:
+        servers:
+          - url: http://172.21.0.2:8686
+
+    prowlarr:
+      loadBalancer:
+        servers:
+          - url: http://172.21.0.2:9696
+  routers:
+    sabnzbd-secure:
+      rule: Host(`sabnzbd.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - secure-headers@file
+      tls:
+        certResolver: stepca
+      service: sabnzbd@file
+
+    sonarr-secure:
+      rule: Host(`sonarr.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - secure-headers@file
+      tls:
+        certResolver: stepca
+      service: sonarr@file
+
+    radarr-secure:
+      rule: Host(`radarr.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - secure-headers@file
+      tls:
+        certResolver: stepca
+      service: radarr@file
+
+    lidarr-secure:
+      rule: Host(`lidarr.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - secure-headers@file
+      tls:
+        certResolver: stepca
+      service: lidarr@file
+
+    prowlarr-secure:
+      rule: Host(`prowlarr.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - secure-headers@file
+      tls:
+        certResolver: stepca
+      service: prowlarr@file

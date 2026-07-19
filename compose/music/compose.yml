@@ -1,0 +1,68 @@
+name: music
+services:
+  mpd:
+    container_name: mpd
+    hostname: mpd
+    build:
+      context: ../../build/mpd
+      dockerfile: Dockerfile
+      args:
+        HOST_UID: 1003
+        HOST_GID: 1003
+    runtime: runc
+    restart: unless-stopped
+    cpus: 1
+    mem_limit: 1g
+    pids_limit: 128
+    cap_drop:
+      - ALL
+    environment:
+      - MPD_OUTPUT_AUDIO_PIPE=1
+      - TZ=${TIMEZONE:-Etc/UTC}
+    volumes:
+      - /opt/appdata/mpd/mpd.conf:/etc/mpd.conf:ro
+      - /mnt/shared/music/library:/var/lib/mpd/music/library:ro
+      - /opt/appdata/mpd:/var/lib/mpd/data
+      - /opt/appdata/mpd/playlists:/var/lib/mpd/playlists
+      - /opt/appdata/mpd/pipe:/audio
+    ports:
+      - 1704:1704/tcp
+    networks:
+      frontend:
+        ipv4_address: 172.34.0.2
+
+  snapcast:
+    container_name: snapcast
+    build:
+      context: ../../build/snapserver
+      dockerfile: Dockerfile
+      args:
+        HOST_UID: 1003
+        HOST_GID: 1003
+    runtime: runc
+    network_mode: service:mpd
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    environment:
+      - TZ=${TIMEZONE:-Etc/UTC}
+    volumes:
+      - /opt/appdata/snapcast/.config/snapserver/snapserver.conf:/etc/snapserver.conf:ro
+      - /opt/appdata/snapcast:/var/lib/snapserver
+      - /opt/appdata/mpd/pipe:/audio
+
+  cyp:
+    image: ghcr.io/ondras/cyp:master
+    container_name: cyp
+    network_mode: service:mpd
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+
+networks:
+  frontend:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 172.34.0.0/16
+        - subnet: fd34:1::/48

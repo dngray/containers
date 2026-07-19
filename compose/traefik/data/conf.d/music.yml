@@ -1,0 +1,34 @@
+http:
+  services:
+    cyp:
+      loadBalancer:
+        servers:
+          - url: http://172.34.0.2:8080
+
+    snapweb:
+      loadBalancer:
+        servers:
+          - url: http://172.34.0.2:1780
+
+  routers:
+    cyp-secure:
+      rule: Host(`music.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - secure-headers@file
+      tls:
+        certResolver: stepca
+      service: cyp@file
+
+    snapweb-secure:
+      rule: Host(`snapcast.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - secure-headers@file
+      tls:
+        certResolver: stepca
+      service: snapweb@file

@@ -1,0 +1,37 @@
+layout {
+    // 💰 Credit HUD: Borderless 1-line header at the very top
+    pane size=2 borderless=true {
+        name "Credits"
+        command "fortress-credits"
+    }
+
+    pane split_direction="vertical" {
+        // Left: Your Native Trusted Editor
+        pane name="LazyVim" size="70%" {
+            command "bash"
+            args "-c" "nvim ."
+        }
+
+        // Right: The Stacked Fortress
+        pane split_direction="horizontal" {
+            pane name="Jail" stacked=true {
+                // Tab at the top for server hosting & tracking live logs
+                pane name="AI Server Logs" {
+                    command "bash"
+                    args "-c" "ai-secure opencode; exec bash"
+                }
+                // Active interactive window (Waits slightly for server boot, fully environment-aware)
+                pane name="OpenCode TUI" {
+                    command "bash"
+                    args "-c" "sleep 1 && ai-secure shell"
+                    focus true
+                }
+            }
+        }
+    }
+
+    // Modern Status Bar (Toggle with Ctrl-h)
+    pane size=1 borderless=true {
+        plugin location="zellij:status-bar"
+    }
+}

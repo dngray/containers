@@ -1,0 +1,19 @@
+name: navidrome
+services:
+  navidrome:
+    image: docker.io/deluan/navidrome:latest
+    container_name: navidrome
+    user: 1003:1004
+    network_mode: container:wg3
+    runtime: runsc-systrap
+    restart: unless-stopped
+    cpus: 2
+    mem_limit: 4g
+    pids_limit: 1024
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - /opt/appdata/navidrome:/data
+      - /mnt/shared/music:/music:ro

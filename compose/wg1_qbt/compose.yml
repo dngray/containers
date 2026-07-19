@@ -1,0 +1,73 @@
+name: wg1_qbt
+services:
+  pre-flight-notices:
+    image: docker.io/library/busybox:stable-musl
+    container_name: qbt_notices
+    restart: "no"
+    command: >
+      sh -c 'printf "1. %bDAC_OVERRIDE%b capability is required when adding a torrent from the command line with %bqbittorrent-nox --add-paused=true%b, otherwise you get %bQtLockedFile::lock(): file is not opened%b error.\n2. When using %brunsc%b need to set the Network Interface, eg Options > Advanced > Network Interface: wg0 (or tun0 with OpenVPN). Each restart this will need to be flicked to one of the other options and back to your interface of choice.\n" "\033[32m" "\033[0m" "\033[32m" "\033[0m" "\033[32m" "\033[0m" "\033[32m" "\033[0m"'
+
+  wg1:
+    image: ghcr.io/wfg/wireguard
+    container_name: wg1
+    hostname: wg1
+    runtime: runc
+    restart: unless-stopped
+    depends_on:
+      pre-flight-notices:
+        condition: service_completed_successfully
+    cpus: 4
+    mem_limit: 8g
+    pids_limit: 2048
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - ALLOWED_SUBNETS=${NETWORK}/24
+    volumes:
+      - /opt/appdata/wireguard/${WG1}.conf:/etc/wireguard/wg0.conf
+    ports:
+      - 127.0.0.1:8081:8081
+    networks:
+      frontend:
+        ipv4_address: 172.20.0.2
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent
+    container_name: qbittorrent
+    network_mode: service:wg1
+    runtime: runsc-systrap
+    restart: unless-stopped
+    depends_on:
+      wg1:
+        condition: service_started
+    cpus: 2
+    mem_limit: 4g
+    pids_limit: 1024
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_READ_SEARCH
+      - SETUID
+      - SETGID
+    environment:
+      - PUID=1003
+      - PGID=1003
+      - WEBUI_PORT=8081
+    volumes:
+      - /opt/appdata/qbittorrent:/config
+      - /mnt/shared/incoming:/mnt/shared/incoming
+      - /mnt/shared/movies:/mnt/shared/movies
+      - /mnt/shared/tv:/mnt/shared/tv
+
+networks:
+  frontend:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+        - subnet: fd20:1::/48
