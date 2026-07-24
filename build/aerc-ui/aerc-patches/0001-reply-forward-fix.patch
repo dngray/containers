@@ -1,0 +1,108 @@
+diff --git a/commands/msg/forward.go b/commands/msg/forward.go
+index d4d8b865..954ae96d 100644
+--- a/commands/msg/forward.go
++++ b/commands/msg/forward.go
+@@ -208,18 +208,22 @@ func (f forward) Execute(args []string) error {
+ 			}
+ 		}
+ 
+-		if crypto.IsEncrypted(msg.BodyStructure) && !isMsgViewer {
+-			return fmt.Errorf("message is encrypted. " +
+-				"can only forward from the message viewer")
++		bs := msg.BodyStructure
++		if crypto.IsEncrypted(bs) {
++			if !isMsgViewer {
++				return fmt.Errorf("message is encrypted. " +
++					"can only forward from the message viewer")
++			}
++			bs = mv.MessageView().BodyStructure()
+ 		}
+ 
+-		part := getMessagePart(msg, widget)
++		part := getMessagePart(msg.Envelope, bs, widget)
+ 		if part == nil {
+-			part = lib.FindFirstNonMultipart(msg.BodyStructure, nil)
++			part = lib.FindFirstNonMultipart(bs, nil)
+ 			// if it's still nil here, we don't have a multipart msg, that's fine
+ 		}
+ 
+-		err = addMimeType(msg, part, &original)
++		err = addMimeType(bs, part, &original)
+ 		if err != nil {
+ 			return err
+ 		}
+diff --git a/commands/msg/reply.go b/commands/msg/reply.go
+index 8abd57e3..e694e41e 100644
+--- a/commands/msg/reply.go
++++ b/commands/msg/reply.go
+@@ -229,20 +229,24 @@ func (r reply) Execute(args []string) error {
+ 			}
+ 		}
+ 
+-		if crypto.IsEncrypted(msg.BodyStructure) && !isMsgViewer {
+-			return fmt.Errorf("message is encrypted. " +
+-				"can only include reply from the message viewer")
++		bs := msg.BodyStructure
++		if crypto.IsEncrypted(bs) {
++			if !isMsgViewer {
++				return fmt.Errorf("message is encrypted. " +
++					"can only include reply from the message viewer")
++			}
++			bs = mv.MessageView().BodyStructure()
+ 		}
+ 
+-		part := getMessagePart(msg, widget)
++		part := getMessagePart(msg.Envelope, bs, widget)
+ 		if part == nil {
+ 			// mkey... let's get the first thing that isn't a container
+ 			// if that's still nil it's either not a multipart msg (ok) or
+ 			// broken (containers only)
+-			part = lib.FindFirstNonMultipart(msg.BodyStructure, nil)
++			part = lib.FindFirstNonMultipart(bs, nil)
+ 		}
+ 
+-		err = addMimeType(msg, part, &original)
++		err = addMimeType(bs, part, &original)
+ 		if err != nil {
+ 			return err
+ 		}
+@@ -352,11 +356,11 @@ func setReferencesHeader(target, parent *mail.Header) error {
+ }
+ 
+ // addMimeType adds the proper mime type of the part to the originalMail struct
+-func addMimeType(msg *models.MessageInfo, part []int,
++func addMimeType(bs *models.BodyStructure, part []int,
+ 	orig *models.OriginalMail,
+ ) error {
+ 	// caution, :forward uses the code as well, keep that in mind when modifying
+-	bs, err := msg.BodyStructure.PartAtIndex(part)
++	bs, err := bs.PartAtIndex(part)
+ 	if err != nil {
+ 		return err
+ 	}
+diff --git a/commands/msg/utils.go b/commands/msg/utils.go
+index 3e008060..ec21f386 100644
+--- a/commands/msg/utils.go
++++ b/commands/msg/utils.go
+@@ -61,14 +61,15 @@ func (h *helper) messages() ([]*models.MessageInfo, error) {
+ 	return commands.MsgInfoFromUids(store, uid, h.statusInfo)
+ }
+ 
+-func getMessagePart(msg *models.MessageInfo, provider app.ProvidesMessage) []int {
++func getMessagePart(env *models.Envelope, bs *models.BodyStructure,
++                    provider app.ProvidesMessage) []int {
+ 	p := provider.SelectedMessagePart()
+ 	if p != nil {
+ 		return p.Index
+ 	}
+-	viewerConfig := config.Viewer().ForEnvelope(msg.Envelope)
++	viewerConfig := config.Viewer().ForEnvelope(env)
+ 	for _, mime := range viewerConfig.Alternatives {
+-		part := lib.FindMIMEPart(mime, msg.BodyStructure, nil)
++		part := lib.FindMIMEPart(mime, bs, nil)
+ 		if part != nil {
+ 			return part
+ 		}
+-- 
+2.53.0
+
