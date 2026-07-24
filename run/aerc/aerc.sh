@@ -10,17 +10,22 @@ SYNC_TAG="mail-sync:latest"
 
 case "$1" in
 build)
-  info "==> Querying upstream repository for latest stable release tag..."
 
-  LATEST_VERSION=$(curl -s "https://git.sr.ht/~rjarry/aerc/refs" |
-    grep -Eoi 'href="/~rjarry/aerc/archive/[0-9.]+\.tar\.gz"' |
-    grep -oP 'archive/\K[0-9.]*[0-9]' | head -n 1 || true)
-
-  if [ -z "$LATEST_VERSION" ]; then
-    warn "Could not fetch dynamic tags. Falling back to core engine default..."
-    LATEST_VERSION="0.21.0"
+  if [ -n "${AERC_VERSION:-}" ]; then
+    LATEST_VERSION="${AERC_VERSION}"
   else
-    ok "Found current production release layer version: ${LATEST_VERSION}"
+    info "==> Querying upstream repository for latest stable release tag..."
+
+    LATEST_VERSION=$(curl -s "https://git.sr.ht/~rjarry/aerc/refs" |
+      grep -Eoi 'href="/~rjarry/aerc/archive/[0-9.]+\.tar\.gz"' |
+      grep -oP 'archive/\K[0-9.]*[0-9]' | head -n 1 || true)
+
+    if [ -z "$LATEST_VERSION" ]; then
+      warn "Could not fetch dynamic tags. Falling back to core engine default..."
+      LATEST_VERSION="0.22.0"
+    else
+      ok "Found current production release layer version: ${LATEST_VERSION}"
+    fi
   fi
 
   info "==> 1/2 Building Interactive UI Client (${UI_TAG})..."
