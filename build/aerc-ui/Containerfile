@@ -17,6 +17,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && apt-get update && apt-get install -y --no-install-recommends \
         libnotmuch-dev \
         scdoc \
+        patch \
     && groupadd -g ${HOST_GID} aerc \
     && useradd --create-home --shell /bin/bash -u ${HOST_UID} -g ${HOST_GID} aerc \
     && passwd --delete aerc
@@ -27,7 +28,11 @@ USER aerc
 # Download and build aerc
 ADD --chown=aerc:aerc https://git.sr.ht/~rjarry/aerc/archive/${version}.tar.gz aerc.tar.gz
 RUN tar xzf aerc.tar.gz --strip-components=1
-RUN gmake && gmake install PREFIX=~/.local
+
+COPY --chown=aerc:aerc build/aerc-ui/aerc-patches/0001-reply-forward-fix.patch /tmp/
+RUN patch -p1 < /tmp/0001-reply-forward-fix.patch || true
+
+RUN make && make install PREFIX=~/.local
 
 # Build goimapnotify as the same user
 RUN go install gitlab.com/shackra/goimapnotify/cmd/goimapnotify@2.5.6
