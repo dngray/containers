@@ -77,7 +77,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         bat \
         fd-find \
         fzf \
-        gnupg \
+        pinentry-curses \
+        gpg-from-sq \
+        sq \
+        sqop \
         gopass \
         gopass-archive-keyring \
         isync \
