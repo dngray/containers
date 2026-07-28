@@ -35,7 +35,8 @@ RUN patch -p1 < /tmp/0001-reply-forward-fix.patch || true
 RUN make && make install PREFIX=~/.local
 
 # Build goimapnotify as the same user
-RUN go install gitlab.com/shackra/goimapnotify/cmd/goimapnotify@2.5.6
+RUN go install gitlab.com/shackra/goimapnotify/cmd/goimapnotify@2.5.6 \
+    && go install github.com/ferdinandyb/caeml@latest
 
 # Stage 2: Final image
 FROM docker.io/debian:latest
@@ -104,6 +105,7 @@ RUN dpkg -i /tmp/nvim-linux-x86_64.deb || apt-get install -f -y && rm /tmp/nvim-
 # Copy binaries and directories from the builder image
 COPY --from=builder --chown=aerc:aerc /home/aerc/.local/ /home/aerc/.local/
 COPY --from=builder /go/bin/goimapnotify /usr/local/bin/goimapnotify
+COPY --from=builder /go/bin/caeml /usr/local/bin/caeml
 
 # Ensure binaries and directories are accessible by arbitrary UID
 RUN chmod -R a+rx /home/aerc \
