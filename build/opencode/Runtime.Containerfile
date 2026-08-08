@@ -5,7 +5,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 ARG HOST_UID=1000
 ARG HOST_GID=1000
-
 ARG COMPILER_IMAGE=opencode-compiler:latest
 
 # 1. Bring in Python from our compiler image asset
@@ -49,7 +48,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # 5. Use them to create the user
 RUN groupadd -f -g $HOST_GID opencode || true && \
-    useradd -m -u $HOST_UID -g $HOST_GID -s /bin/bash opencode
+    useradd -m -u $HOST_UID -g 0 -s /bin/bash opencode
 WORKDIR /home/opencode/workspace
 
 # 6. Python Dependency Step
@@ -93,20 +92,32 @@ ENDJSON
 RUN chown -R opencode:opencode /home/opencode/.config /home/opencode/.local
 COPY --from=$COMPILER_IMAGE --chown=opencode:opencode /out/bin/lean-ctx /home/opencode/.local/bin/lean-ctx
 ENV PATH="/home/opencode/.local/bin:/opt/python-${PYTHON_VERSION}/bin:/usr/local/bin:$PATH"
-USER opencode
+
+RUN mkdir -p /home/opencode/.local/share/opencode \
+             /home/opencode/.local/state/opencode \
+             /home/opencode/.cache/opencode
+
+ENV NPM_CONFIG_PREFIX="/home/opencode/.local" \
+    UV_TOOL_DIR="/home/opencode/.local/share/uv/tools" \
+    UV_TOOL_BIN_DIR="/home/opencode/.local/bin"
 
 # Install SeMBLe and code-index-mcp locally in user-space
 RUN uv tool install --with mcp "semble[mcp]" && \
     uv tool install "code-index-mcp" && \
     uv tool install "python-lsp-server"
 
-ENV NPM_CONFIG_PREFIX="/home/opencode/.local"
 RUN npm install -g \
     --registry=https://registry.npmjs.org \
     --network-concurrency=8 \
     --fetch-retry-maxtimeout=300000 \
     --fetch-timeout=300000 \
     repomix bash-language-server
+
+RUN chown -R $HOST_UID:0 /home/opencode && \
+    chmod -R g=u /home/opencode && \
+    chmod -R 775 /home/opencode
+
+USER opencode
 
 RUN opencode --version
 
@@ -122,6 +133,16 @@ ARG COMPILER_IMAGE=opencode-compiler:latest
 COPY --from=$COMPILER_IMAGE /out/opencode /usr/local/bin/opencode
 
 RUN groupadd -f -g $HOST_GID opencode || true && \
-    useradd -m -u $HOST_UID -g $HOST_GID -s /bin/bash opencode
+    useradd -m -u $HOST_UID -g 0 -s /bin/bash opencode
+
+RUN mkdir -p /home/opencode/.config/opencode \
+             /home/opencode/.local/share/opencode \
+             /home/opencode/.local/state/opencode \
+             /home/opencode/.cache
+
+RUN chown -R $HOST_UID:0 /home/opencode && \
+    chmod -R g=u /home/opencode && \
+    chmod -R 775 /home/opencode
+
 USER opencode
 ENTRYPOINT ["opencode"]
