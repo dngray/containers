@@ -31,9 +31,43 @@ services:
       - RUN_MIGRATIONS=1
       - CREATE_ADMIN=1
       - BASE_URL=https://rss.${DOMAIN}
+      - HTTP_CLIENT_PROXY=http://127.0.0.1:8191
     env_file:
       - miniflux.env
     depends_on:
       miniflux-db:
         condition: service_healthy
     network_mode: container:wg3
+
+  glider:
+    extends:
+      file: ../_common/app.yml
+      service: app
+    image: docker.io/nadoo/glider:0.16.4
+    container_name: glider_proxy
+    ports:
+      - 127.0.0.1:1080:1080
+      - 172.23.0.1:1080:1080
+    command: ["-listen", "mixed://:1080", "-verbose"]
+    networks:
+      frontend:
+        ipv4_address: 172.27.0.3
+
+  flaresolverr:
+    extends:
+      file: ../_common/app.yml
+      service: app-runc
+    image: ghcr.io/flaresolverr/flaresolverr:v3.5.0
+    container_name: flaresolverr
+    network_mode: container:wg3
+    environment:
+      - LOG_LEVEL=info
+      - TZ=UTC
+
+networks:
+  frontend:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 172.27.0.0/16
+        - subnet: fd27:1::/48
