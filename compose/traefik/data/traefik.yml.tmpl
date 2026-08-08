@@ -20,6 +20,11 @@ entryPoints:
     address: :4430
     http3:
       advertisedPort: 443
+    transport:
+      respondingTimeouts:
+        readTimeout: "30m"
+        writeTimeout: "30m"
+        idleTimeout: "5m"
   # metrics:
   #   address: 172.21.0.2:8082
   pypw_secure:
