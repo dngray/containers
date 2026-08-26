@@ -68,7 +68,7 @@ case "$APP_TYPE" in
 
   # shellcheck disable=SC1091
   [ -f "$HOME/.config/containers/containers.env" ] && . "$HOME/.config/containers/containers.env"
-  REGISTRY="${REG_URL:-localhost}/opencode"
+  REGISTRY="${REG_URL:-localhost}/library/opencode"
 
   if [ "$TOOL" == "shell" ]; then
     IMAGE="${REGISTRY}/opencode-tui:latest"
@@ -86,7 +86,7 @@ case "$APP_TYPE" in
 "goose")
   # shellcheck disable=SC1091
   [ -f "$HOME/.config/containers/containers.env" ] && . "$HOME/.config/containers/containers.env"
-  REGISTRY="${REG_URL:-localhost}/goose"
+  REGISTRY="${REG_URL:-localhost}/library/goose"
 
   JAIL_HOME="/home/goose"
   JAIL_WORK="$JAIL_HOME/workspace/$REL_PATH"

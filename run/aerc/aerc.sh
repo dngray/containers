@@ -11,6 +11,7 @@ SYNC_TAG="${REG_URL:-localhost}/library/aerc/mail-sync:latest"
 case "$1" in
 build)
 
+resolve_version() {
   if [ -n "${AERC_VERSION:-}" ]; then
     LATEST_VERSION="${AERC_VERSION}"
   else
@@ -27,6 +28,10 @@ build)
       ok "Found current production release layer version: ${LATEST_VERSION}"
     fi
   fi
+}
+
+build_images() {
+  resolve_version
 
   info "==> 1/2 Building Interactive UI Client (${UI_TAG})..."
   podman build -f "${CONTAINER_REPO_PATH}/build/aerc-ui/Containerfile" \
@@ -41,6 +46,32 @@ build)
     --build-arg HOST_UID="${HOST_UID}" \
     --build-arg HOST_GID="${HOST_GID}" \
     -t "${SYNC_TAG}" "${CONTAINER_REPO_PATH}"
+}
+
+case "$1" in
+build)
+  build_images
+  ;;
+
+publish)
+  build_images
+
+  if [ "${LATEST_VERSION}" = "master" ]; then
+    _hash="latest"
+  else
+    _hash="${LATEST_VERSION}"
+  fi
+
+  warn "==> Distributing Aerc [${_hash}] container imagery..."
+
+  podman tag "${UI_TAG}" "${REG_URL}/library/aerc/aerc-ui:${_hash}"
+  podman tag "${SYNC_TAG}" "${REG_URL}/library/aerc/mail-sync:${_hash}"
+
+  podman push "${UI_TAG}"
+  podman push "${SYNC_TAG}"
+  podman push "${REG_URL}/library/aerc/aerc-ui:${_hash}"
+  podman push "${REG_URL}/library/aerc/mail-sync:${_hash}"
+  ok "✔ Aerc distribution loop completed!"
   ;;
 
 clean)
@@ -51,7 +82,7 @@ clean)
 
 *)
   error "Error: Invalid command." >&2
-  printf "Usage: %s {build|clean}\n" "$0"
+  printf "Usage: %s {build|publish|clean}\n" "$0"
   exit 1
   ;;
 esac
