@@ -66,6 +66,7 @@ aerc)
   ;;
 aerc-build) "${CONTAINER_REPO_PATH}/run/aerc/aerc.sh" build ;;
 aerc-clean) "${CONTAINER_REPO_PATH}/run/aerc/aerc.sh" clean ;;
+aerc-publish) "${CONTAINER_REPO_PATH}/run/aerc/aerc.sh" publish ;;
 aerc-down)
   info "==> Gracefully tearing down Aerc Mail Pod Architecture..."
   # Stopping the pod infrastructure service cascades down and safely kills all child containers
@@ -104,6 +105,7 @@ neovim-parsers-build) "${CONTAINER_REPO_PATH}/run/neovim/treesitter.sh" build ;;
 neovim-parsers-clean) "${CONTAINER_REPO_PATH}/run/neovim/treesitter.sh" clean ;;
 snapclient-build) "${CONTAINER_REPO_PATH}/run/snapclient/snapclient.sh" build ;;
 snapclient-clean) "${CONTAINER_REPO_PATH}/run/snapclient/snapclient.sh" clean ;;
+snapclient-publish) "${CONTAINER_REPO_PATH}/run/snapclient/snapclient.sh" publish ;;
 
 snapclient-selinux-cil)
   "${CONTAINER_REPO_PATH}/bin/build-selinux" \
@@ -141,12 +143,12 @@ imapfilter-clean) "${CONTAINER_REPO_PATH}/run/imapfilter/imapfilter.sh" clean ;;
 opencode-compiler) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" build-compiler ;;
 opencode-server) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" build-server ;;
 opencode-tui) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" build-tui ;;
-fortress-publish) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" publish-opencode ;;
+opencode-publish) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" opencode-publish ;;
 fortress-clean) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" clean-opencode ;;
 
 goose-server) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" build-goose-server ;;
 goose-cli) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" build-goose-cli ;;
-goose-publish) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" publish-goose ;;
+goose-publish) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" goose-publish ;;
 goose-clean) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" clean-goose ;;
 
 fortress-selinux-cil)
@@ -225,8 +227,10 @@ tftp-clean)
   item "neovim-build-clean" "Remove Neovim build artifacts"
   item "snapclient-build" "Build Snapcast client container for laptop playback"
   item "snapclient-clean" "Remove Snapcast client image"
+  item "snapclient-publish" "Push Snapclient image to container registry"
   item "aerc-build" "Build split Aerc UI and Mail-Sync images"
   item "aerc-clean" "Remove Aerc system images and container structures"
+  item "aerc-publish" "Push Aerc UI and Mail-Sync images to container registry"
   item "davmail-build" "Build Davmail container"
   item "davmail-clean" "Remove Davmail container and image"
   item "imapfilter-build" "Build Imapfilter container"
@@ -236,7 +240,10 @@ tftp-clean)
   item "opencode-compiler" "Build cold cache compiler layer for Opencode"
   item "opencode-server" "Assemble backend tool server"
   item "opencode-tui" "Extract compiled app into unprivileged local TUI"
+  item "opencode-publish" "Push Opencode server and TUI images to container registry"
+  item "goose-server" "Build centralized Goose AI Server"
   item "goose-cli" "Build terminal interface for Goose agent"
+  item "goose-publish" "Push Goose server and CLI images to container registry"
 
   printf '%b\n' "  ${CYAN}SELinux Policies:${NC}"
   item "fortress-selinux-cil" "Build fortress SELinux policy module (.cil)"
