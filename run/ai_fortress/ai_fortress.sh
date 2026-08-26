@@ -4,11 +4,11 @@ set -e
 # 1. Boot up our shared coloring engine from the central library folder (Updated to Singular)
 . "${CONTAINER_REPO_PATH}/lib/colors.sh"
 
-COMPILER_IMG="${REG_URL}/opencode/opencode-compiler:latest"
-SERVER_IMG="${REG_URL}/opencode/opencode-server:latest"
-TUI_IMG="${REG_URL}/opencode/opencode-tui:latest"
-GOOSE_SERVER_IMG="${REG_URL}/goose/goose-server:latest"
-GOOSE_CLI_IMG="${REG_URL}/goose/goose-cli:latest"
+COMPILER_IMG="${REG_URL}/library/opencode/opencode-compiler:latest"
+SERVER_IMG="${REG_URL}/library/opencode/opencode-server:latest"
+TUI_IMG="${REG_URL}/library/opencode/opencode-tui:latest"
+GOOSE_SERVER_IMG="${REG_URL}/library/goose/goose-server:latest"
+GOOSE_CLI_IMG="${REG_URL}/library/goose/goose-cli:latest"
 
 case "$1" in
 # ── Opencode Actions ──
@@ -45,21 +45,25 @@ build-tui)
     -t "${TUI_IMG}" "${CONTAINER_REPO_PATH}"
   ;;
 
-publish-opencode)
+opencode-publish)
+  "$0" build-compiler
   "$0" build-server
   "$0" build-tui
   _hash=$(git ls-remote https://github.com/anomalyco/opencode.git HEAD | cut -c1-7)
   warn "==> Distributing Opencode [${_hash}] container imagery..."
 
   # Tag the local build with the git hash
-  podman tag "${SERVER_IMG}" "${REG_URL}/opencode-server:${_hash}"
-  podman tag "${TUI_IMG}" "${REG_URL}/opencode-tui:${_hash}"
+  podman tag "${COMPILER_IMG}" "${REG_URL}/library/opencode/opencode-compiler:${_hash}"
+  podman tag "${SERVER_IMG}" "${REG_URL}/library/opencode/opencode-server:${_hash}"
+  podman tag "${TUI_IMG}" "${REG_URL}/library/opencode/opencode-tui:${_hash}"
 
   # Push both the hash tags and the latest tags
+  podman push "${COMPILER_IMG}"
   podman push "${SERVER_IMG}"
   podman push "${TUI_IMG}"
-  podman push "${REG_URL}/opencode-server:${_hash}"
-  podman push "${REG_URL}/opencode-tui:${_hash}"
+  podman push "${REG_URL}/library/opencode/opencode-compiler:${_hash}"
+  podman push "${REG_URL}/library/opencode/opencode-server:${_hash}"
+  podman push "${REG_URL}/library/opencode/opencode-tui:${_hash}"
   ok "✔ Opencode distribution loop completed!"
   ;;
 
@@ -88,21 +92,21 @@ build-goose-cli)
     -t "${GOOSE_CLI_IMG}" "${CONTAINER_REPO_PATH}"
   ;;
 
-publish-goose)
+goose-publish)
   "$0" build-goose-server
   "$0" build-goose-cli
   _hash=$(git ls-remote https://github.com/aaif-goose/goose.git HEAD | cut -c1-7)
   warn "==> Distributing Goose [${_hash}] container imagery..."
 
   # Tag the local build with the git hash
-  podman tag "${GOOSE_SERVER_IMG}" "${REG_URL}/goose-server:${_hash}"
-  podman tag "${GOOSE_CLI_IMG}" "${REG_URL}/goose-cli:${_hash}"
+  podman tag "${GOOSE_SERVER_IMG}" "${REG_URL}/library/goose/goose-server:${_hash}"
+  podman tag "${GOOSE_CLI_IMG}" "${REG_URL}/library/goose/goose-cli:${_hash}"
 
   # Push both the hash tags and the latest tags
   podman push "${GOOSE_SERVER_IMG}"
   podman push "${GOOSE_CLI_IMG}"
-  podman push "${REG_URL}/goose-server:${_hash}"
-  podman push "${REG_URL}/goose-cli:${_hash}"
+  podman push "${REG_URL}/library/goose/goose-server:${_hash}"
+  podman push "${REG_URL}/library/goose/goose-cli:${_hash}"
   ok "✔ Goose distribution loop completed!"
   ;;
 
