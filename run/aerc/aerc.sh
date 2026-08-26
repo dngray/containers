@@ -43,6 +43,33 @@ build)
     -t "${SYNC_TAG}" "${CONTAINER_REPO_PATH}"
   ;;
 
+publish)
+  "$0" build
+
+  if [ -n "${AERC_VERSION:-}" ]; then
+    _hash="${AERC_VERSION}"
+  else
+    _hash=$(curl -s "https://git.sr.ht/~rjarry/aerc/refs" |
+      grep -Eoi 'href="/~rjarry/aerc/archive/[0-9.]+\.tar\.gz"' |
+      grep -oP 'archive/\K[0-9.]*[0-9]' | head -n 1 || true)
+
+    if [ -z "$_hash" ]; then
+      _hash="latest"
+    fi
+  fi
+
+  warn "==> Distributing Aerc [${_hash}] container imagery..."
+
+  podman tag "${UI_TAG}" "${REG_URL}/aerc/aerc-ui:${_hash}"
+  podman tag "${SYNC_TAG}" "${REG_URL}/aerc/mail-sync:${_hash}"
+
+  podman push "${UI_TAG}"
+  podman push "${SYNC_TAG}"
+  podman push "${REG_URL}/aerc/aerc-ui:${_hash}"
+  podman push "${REG_URL}/aerc/mail-sync:${_hash}"
+  ok "✔ Aerc distribution loop completed!"
+  ;;
+
 clean)
   warn "🧹 Purging old Aerc container components and split image assets..."
   podman rm -f aerc-ui aerc-sync 2>/dev/null || true
@@ -51,7 +78,7 @@ clean)
 
 *)
   error "Error: Invalid command." >&2
-  printf "Usage: %s {build|clean}\n" "$0"
+  printf "Usage: %s {build|publish|clean}\n" "$0"
   exit 1
   ;;
 esac
