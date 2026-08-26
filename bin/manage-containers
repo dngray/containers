@@ -1,0 +1,199 @@
+#!/bin/sh
+set -e
+
+# Source our library module using the locally calculated path
+# shellcheck source=lib/colors.sh
+. "${CONTAINER_REPO_PATH}/lib/colors.sh"
+
+# 2. Quietly source environment policy definitions if present
+if [ -f "$HOME/.config/containers/containers.env" ]; then
+  # shellcheck source=/dev/null
+  . "$HOME/.config/containers/containers.env"
+fi
+
+# 3. Securely export local runtime configurations
+REG_URL="$(printf '%s' "${REG_URL}" | tr -d '"')"
+export REG_URL
+HOST_UID="$(id -u)"
+export HOST_UID
+HOST_GID="$(id -g)"
+export HOST_GID
+
+# 4. Override the global item macro to enforce a perfectly aligned layout table
+item() { printf '  %b%-23s%b %s\n' "$GREEN" "$1" "$NC" "$2"; }
+
+case "$1" in
+# ── Debian VM Docker Control Routes ──
+docker-all-up) "${CONTAINER_REPO_PATH}/compose/manage-compose.sh" all-up ;;
+docker-traefik-build) "${CONTAINER_REPO_PATH}/compose/manage-compose.sh" traefik-build ;;
+docker-music-build) "${CONTAINER_REPO_PATH}/compose/manage-compose.sh" music-build ;;
+docker-up-build) "${CONTAINER_REPO_PATH}/compose/manage-compose.sh" up-build ;;
+docker-all-down) "${CONTAINER_REPO_PATH}/compose/manage-compose.sh" stop-all ;;
+docker-all-remove) "${CONTAINER_REPO_PATH}/compose/manage-compose.sh" rm-all ;;
+docker-images-flush) "${CONTAINER_REPO_PATH}/compose/manage-compose.sh" rmi-all ;;
+docker-prune-net) "${CONTAINER_REPO_PATH}/compose/manage-compose.sh" prune-net ;;
+
+docker-list)
+  info "==> Auditing Docker VM Container Cluster..."
+  if command -v sudo >/dev/null 2>&1; then
+    sudo docker ps -all && sudo docker images && sudo docker network ls
+  elif command -v run0 >/dev/null 2>&1; then
+    run0 docker ps -all && run0 docker images && run0 docker network ls
+  else
+    docker ps -all && docker images && docker network ls
+  fi
+  ;;
+
+# ── Local Hardened Workstation Targets (Podman/Rootless) ──
+aerc)
+  zellij --layout "${CONTAINER_REPO_PATH}/layouts/aerc-fortress.kdl" \
+    options \
+    --mouse-mode true \
+    --mouse-click-through true \
+    --copy-on-select false \
+    --pane-frames false
+  # "${CONTAINER_REPO_PATH}/run/aerc/aerc.sh" run
+  ;;
+aerc-build) "${CONTAINER_REPO_PATH}/run/aerc/aerc.sh" build ;;
+aerc-clean) "${CONTAINER_REPO_PATH}/run/aerc/aerc.sh" clean ;;
+aerc-selinux-rpm)
+  "${CONTAINER_REPO_PATH}/bin/create-rpm" \
+    "${CONTAINER_REPO_PATH}/run/aerc/container_aerc.spec" \
+    "${CONTAINER_REPO_PATH}/build/aerc/rpm" \
+    "${CONTAINER_REPO_PATH}/run/aerc/container_aerc.te"
+  ;;
+
+neovim-build) "${CONTAINER_REPO_PATH}/bin/debian-build-neovim" build ;;
+neovim-build-clean) "${CONTAINER_REPO_PATH}/bin/debian-build-neovim" clean ;;
+snapclient-build) "${CONTAINER_REPO_PATH}/run/snapclient/snapclient.sh" build ;;
+snapclient-clean) "${CONTAINER_REPO_PATH}/run/snapclient/snapclient.sh" clean ;;
+
+snapclient-selinux-cil)
+  "${CONTAINER_REPO_PATH}/bin/build-selinux" \
+    "container_snapclient" \
+    "${CONTAINER_REPO_PATH}/run/snapclient" \
+    "${CONTAINER_REPO_PATH}/build/snapclient"
+
+  printf '\n%b\n' "  ${BOLD}Next steps for live testing:${NC}"
+  info "  sudo semodule -i ${CONTAINER_REPO_PATH}/build/snapclient/container_snapclient.cil"
+  ;;
+
+snapclient-selinux-rpm)
+  info "==> Step 1: Triggering CIL compilation payload for Snapclient..."
+  "$0" snapclient-selinux-cil >/dev/null
+
+  info "==> Step 2: Staging asset into RPM creator for Snapclient..."
+  "${CONTAINER_REPO_PATH}/bin/create-rpm" \
+    "${CONTAINER_REPO_PATH}/run/snapclient/container_snapclient.spec" \
+    "${CONTAINER_REPO_PATH}/build/snapclient/rpm" \
+    "${CONTAINER_REPO_PATH}/build/snapclient/container_snapclient.cil"
+  ;;
+
+crowdin) "${CONTAINER_REPO_PATH}/run/crowdin/crowdin.sh" run ;;
+crowdin-pull) "${CONTAINER_REPO_PATH}/run/crowdin/crowdin.sh" pull ;;
+crowdin-clean) "${CONTAINER_REPO_PATH}/run/crowdin/crowdin.sh" clean ;;
+
+davmail) "${CONTAINER_REPO_PATH}/run/davmail/davmail.sh" run ;;
+davmail-build) "${CONTAINER_REPO_PATH}/run/davmail/davmail.sh" build ;;
+davmail-clean) "${CONTAINER_REPO_PATH}/run/davmail/davmail.sh" clean ;;
+
+imapfilter) "${CONTAINER_REPO_PATH}/run/imapfilter/imapfilter.sh" run ;;
+imapfilter-build) "${CONTAINER_REPO_PATH}/run/imapfilter/imapfilter.sh" build ;;
+imapfilter-clean) "${CONTAINER_REPO_PATH}/run/imapfilter/imapfilter.sh" clean ;;
+
+opencode-compiler) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" build-compiler ;;
+opencode-server) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" build-server ;;
+opencode-tui) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" build-tui ;;
+fortress-publish) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" publish-opencode ;;
+fortress-clean) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" clean-opencode ;;
+
+goose-server) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" build-goose-server ;;
+goose-cli) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" build-goose-cli ;;
+goose-publish) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" publish-goose ;;
+goose-clean) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" clean-goose ;;
+
+fortress-selinux-cil)
+  # 1. This generates a pristine, port-injected ai_fortress.cil file in your build folder
+  "${CONTAINER_REPO_PATH}/bin/build-selinux" \
+    "ai_fortress" \
+    "${CONTAINER_REPO_PATH}/run/ai_fortress" \
+    "${CONTAINER_REPO_PATH}/build/ai_fortress"
+
+  printf '\n%b\n' "  ${BOLD}Next steps for live testing:${NC}"
+  info "  sudo semodule -i ${CONTAINER_REPO_PATH}/build/ai_fortress/ai_fortress.cil"
+  info "  sudo restorecon -RFv ${HOME}/.config/ai-fortress ${HOME}/.cache/ai-fortress ${HOME}/.local/share/ai-fortress ${HOME}/.local/state/ai-fortress ${HOME}/src"
+  ;;
+
+fortress-selinux-rpm)
+  # 1. Reuse the exact local generation block above to handle the CIL payload compilation
+  info "==> Step 1: Triggering CIL compilation payload..."
+  "$0" fortress-selinux-cil >/dev/null
+
+  # 2. Package the freshly-baked .cil file directly into your RPM
+  info "==> Step 2: Staging asset into RPM creator..."
+  "${CONTAINER_REPO_PATH}/bin/create-rpm" \
+    "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.spec" \
+    "${CONTAINER_REPO_PATH}/build/ai_fortress/rpm" \
+    "${CONTAINER_REPO_PATH}/build/ai_fortress/ai_fortress.cil"
+  ;;
+
+template)
+  podman run -v ./:/data:Z -v ./:/input:Z -v ./:/output:Z \
+    docker.io/hairyhenderson/gomplate --config=/input/.gomplate.yaml -V
+  ;;
+
+# ── High-Contrast Interactive Menu & Help Sheet ──
+*)
+  printf '%b\n' "${BOLD}Lab Commands:${NC}"
+  printf '%b\n' "  ${CYAN}Debian VM (Docker):${NC}"
+  item "docker-all-up" "Bring up all compose files"
+  item "docker-up-build" "Rebuild and bring up all compose files"
+  item "docker-traefik-build" "Rebuild Traefik edge proxy"
+  item "docker-music-build" "Rebuild music stack (mpd, snapcast, cyp)"
+  item "docker-list" "Show all running containers, images, and networks"
+  item "docker-all-down" "Stop every container on the VM"
+  item "docker-all-remove" "Remove all container instances from storage"
+  item "docker-images-flush" "Flush all cached Docker image layers"
+  item "docker-prune-net" "Remove stopped containers and prune unused networks"
+  item "template" "Compile Go-template configurations using global gomplate schema"
+
+  printf '%b\n' "  ${CYAN}Desktop Apps (Podman/Secureblue):${NC}"
+  item "aerc" "Open mail client"
+  item "crowdin" "Run translation tool interactive shell"
+  item "davmail" "Start Exchange mail gateway proxy"
+  item "imapfilter" "Run imapfilter sorting script"
+
+  printf '%b\n' "  ${CYAN}Build Desktop Apps:${NC}"
+  item "neovim-build" "Build Neovim deb package from source"
+  item "neovim-build-clean" "Remove Neovim build artifacts"
+  item "snapclient-build" "Build Snapcast client container for laptop playback"
+  item "snapclient-clean" "Remove Snapcast client image"
+  item "aerc-build" "Build split Aerc UI and Mail-Sync images"
+  item "aerc-clean" "Remove Aerc system images and container structures"
+  item "davmail-build" "Build Davmail container"
+  item "davmail-clean" "Remove Davmail container and image"
+  item "imapfilter-build" "Build Imapfilter container"
+  item "imapfilter-clean" "Remove Imapfilter container and image"
+
+  printf '%b\n' "  ${CYAN}Confined Agent Jails (SELinux/Podman):${NC}"
+  item "opencode-compiler" "Build cold cache compiler layer for Opencode"
+  item "opencode-server" "Assemble backend tool server"
+  item "opencode-tui" "Extract compiled app into unprivileged local TUI"
+  item "goose-cli" "Build terminal interface for Goose agent"
+
+  printf '%b\n' "  ${CYAN}SELinux Policies:${NC}"
+  item "fortress-selinux-cil" "Build fortress SELinux policy module (.cil)"
+  item "fortress-selinux-rpm" "Build fortress SELinux policy RPM package"
+  item "aerc-selinux-pp" "Build split Aerc SELinux policy module (.pp)"
+  item "aerc-selinux-rpm" "Build split Aerc SELinux policy RPM package"
+  item "snapclient-selinux-cil" "Build snapclient SELinux policy module (.cil)"
+  item "snapclient-selinux-rpm" "Build snapclient SELinux policy RPM package"
+
+  printf '\n%b\n' "${BOLD}💡 Quick Cheat Sheet Reference:${NC}"
+  printf '%b\n' "  Follow logs trailing 50:  ${YELLOW}sudo docker logs --tail 50 --follow --timestamps <name>${NC}"
+  printf '%b\n' "  Execute container shell:  ${YELLOW}docker exec -it <name> ash${NC}"
+  printf '%b\n' "  Check Geolocation (curl): ${YELLOW}curl -s ifconfig.co/country${NC}"
+  printf '%b\n' "  Check Geolocation (wget): ${YELLOW}wget -q -O - ifconfig.co/country${NC}"
+  exit 0
+  ;;
+esac

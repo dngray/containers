@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+set -e
+
+NEOVIM_REPO="neovim/neovim"
+
+REPO_PATH="${CONTAINERS_REPO_PATH:-$(cd "$(dirname "$0")/.." && pwd)}"
+. "${REPO_PATH}/lib/colors.sh"
+
+BUILD_DIR="${REPO_PATH}/build/aerc"
+TEMP_DIR="${REPO_PATH}/build/neovim"
+
+fetch_latest_version() {
+  curl -sfL "https://api.github.com/repos/${NEOVIM_REPO}/releases/latest" |
+    sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p'
+}
+
+build() {
+  local tag version archive_url archive_file src_dir
+
+  clean
+
+  if ! grep -qi debian /etc/os-release 2>/dev/null; then
+    warn "This script targets Debian — the .deb package requires a Debian host to compile correctly."
+  fi
+
+  deps="ninja-build gettext cmake build-essential file"
+  missing=""
+  for pkg in $deps; do
+    if ! dpkg -l "$pkg" >/dev/null 2>&1; then
+      missing="$missing $pkg"
+    fi
+  done
+  if [ -n "$missing" ]; then
+    error "Missing dependencies, install them: sudo apt install$missing"
+    exit 1
+  fi
+
+  tag="$(fetch_latest_version)"
+  version="${tag#v}"
+
+  info "==> Building Neovim ${version}..."
+
+  mkdir -p "${BUILD_DIR}" "${TEMP_DIR}"
+
+  archive_url="https://github.com/${NEOVIM_REPO}/archive/${tag}.tar.gz"
+  archive_file="${TEMP_DIR}/neovim-${tag}.tar.gz"
+
+  curl -fL "${archive_url}" -o "${archive_file}"
+
+  tar xzf "${archive_file}" -C "${TEMP_DIR}"
+
+  src_dir="$(find "${TEMP_DIR}" -mindepth 1 -maxdepth 1 -type d -name "neovim*" | head -1)"
+  if [ -z "${src_dir}" ]; then
+    error "Could not find extracted source directory"
+    exit 1
+  fi
+
+  (
+    cd "${src_dir}"
+    make CMAKE_BUILD_TYPE=RelWithDebInfo
+    cd build
+    cpack -G DEB
+  )
+
+  cp "${src_dir}/build/nvim-linux-x86_64.deb" "${BUILD_DIR}/"
+  ok "Neovim ${version} deb package -> ${BUILD_DIR}/nvim-linux-x86_64.deb"
+
+  # Keep the .deb in TEMP_DIR, remove tarball and extracted source
+  mv "${src_dir}/build/nvim-linux-x86_64.deb" "${TEMP_DIR}/"
+  rm -rf "${src_dir}" "${archive_file}"
+}
+
+clean() {
+  if [ -d "${TEMP_DIR}" ]; then
+    warn "==> Purging Neovim build artifacts..."
+    rm -rf "${TEMP_DIR}"
+    ok "Cleaned ${TEMP_DIR}"
+  else
+    info "Nothing to clean — ${TEMP_DIR} does not exist."
+  fi
+}
+
+case "$1" in
+build) build ;;
+clean) clean ;;
+*)
+  echo "Usage: $0 {build|clean}"
+  exit 1
+  ;;
+esac

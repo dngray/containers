@@ -1,0 +1,2 @@
+(portcon tcp 4096 (system_u object_r fortress_port_t ((s0) (s0))))
+(portcon tcp 5005 (system_u object_r fortress_port_t ((s0) (s0))))
