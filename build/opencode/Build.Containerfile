@@ -105,4 +105,5 @@ RUN if [ ! -d "${CACHE_DIR}/pgvector_src/pgvector-${PGVECTOR_VERSION}" ]; then \
 
 # 6. Install lean-ctx
 RUN curl --proto '=https' --tlsv1.3 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path && \
-    cargo install lean-ctx --version 3.9.16 --root /out
+    . "/mnt/host_cache/cargo/env" && \
+    CARGO_BUILD_JOBS=1 cargo install lean-ctx --root /out --jobs 1
