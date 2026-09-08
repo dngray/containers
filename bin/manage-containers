@@ -49,7 +49,7 @@ aerc)
   info "==> Stabilizing Aerc Mail Pod Architecture..."
   # Explicitly kick off the foundational network pod namespace service first
   systemctl --user start aerc-mail-pod.service
-  systemctl --user start aerc-ui.service aerc-sync.service aerc-bridge.service
+  systemctl --user start aerc-ui.service aerc-sync.service
 
   printf "Waiting for aerc-ui container to verify execution context..."
   until [ "$(podman container inspect -f '{{.State.Running}}' aerc-ui 2>/dev/null)" = "true" ]; do
