@@ -1,0 +1,19 @@
+[Unit]
+Description=Proton Mail Bridge (local SMTP/IMAP gateway)
+After=aerc-mail-pod.service
+Requires=aerc-mail-pod.service
+
+[Container]
+ContainerName=aerc-bridge
+Pod=aerc-mail.pod
+Image=registry.{{ .container_data.docker.domain }}/library/aerc/aerc-bridge:latest
+SecurityLabelType=aerc_t
+Environment=CONTAINER_SMTP_PORT=25
+Environment=CONTAINER_IMAP_PORT=143
+
+# Persist bridge configuration and encrypted credentials across restarts
+Volume=%h/.local/share/mail:/root:rw
+
+[Service]
+StandardOutput=null
+StandardError=null
