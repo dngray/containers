@@ -1,0 +1,74 @@
+http:
+  services:
+    vaultwarden:
+      loadBalancer:
+        servers:
+          - url: http://172.22.0.2:8558
+    beets:
+      loadBalancer:
+        servers:
+          - url: http://172.22.0.2:8337
+    cinny:
+      loadBalancer:
+        servers:
+          - url: http://172.22.0.2:80
+    navidrome:
+      loadBalancer:
+        servers:
+          - url: http://172.22.0.2:4533
+    miniflux:
+      loadBalancer:
+        servers:
+          - url: http://172.22.0.2:8080
+
+  routers:
+    vaultwarden-secure:
+      rule: Host(`bitwarden.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - secure-headers@file
+      tls:
+        certResolver: stepca
+      service: vaultwarden@file
+    beets-secure:
+      rule: Host(`beets.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - secure-headers@file
+      tls:
+        certResolver: stepca
+      service: beets@file
+    cinny-secure:
+      rule: Host(`cinny.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - secure-headers@file
+      tls:
+        certResolver: stepca
+      service: cinny@file
+    navidrome-secure:
+      rule: Host(`navidrome.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - secure-headers@file
+      tls:
+        certResolver: stepca
+      service: navidrome@file
+    miniflux-secure:
+      rule: Host(`rss.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - secure-headers@file
+      tls:
+        certResolver: stepca
+      service: miniflux@file

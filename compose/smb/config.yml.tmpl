@@ -1,0 +1,41 @@
+auth:
+  - user: {{ .container_data.docker.user_1 }}
+    group: {{ .container_data.docker.user_1 }}
+    uid: 1000
+    gid: 1000
+    password: {{ .container_data.docker.samba.user_1_pass }}
+  - user: {{ .container_data.docker.user_2 }}
+    group: {{ .container_data.docker.user_2 }}
+    uid: 1001
+    gid: 1001
+    password: {{ .container_data.docker.samba.user_2_pass }}
+
+#global:
+#  - "force user = {{ .container_data.docker.user_1 }}"
+#  - "force group = {{ .container_data.docker.user_1 }}"
+
+share:
+  - name: shared
+    path: /samba/shared
+    browsable: yes
+    readonly: no
+    guestok: no
+    validusers: {{ .container_data.docker.user_1 }},{{ .container_data.docker.user_2 }}
+    writelist: {{ .container_data.docker.user_1 }},{{ .container_data.docker.user_2 }}
+    veto: no
+  - name: {{ .container_data.docker.user_1 }}
+    path: /samba/{{ .container_data.docker.user_1 }}
+    browsable: yes
+    readonly: no
+    guestok: no
+    validusers: {{ .container_data.docker.user_1 }}
+    writelist: {{ .container_data.docker.user_1 }}
+    veto: no
+  - name: {{ .container_data.docker.user_2 }}
+    path: /samba/{{ .container_data.docker.user_2 }}
+    browsable: yes
+    readonly: no
+    guestok: no
+    validusers: {{ .container_data.docker.user_2 }}
+    writelist: {{ .container_data.docker.user_2 }}
+    veto: no

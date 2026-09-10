@@ -1,0 +1,110 @@
+# Stage 1: Build the aerc and goimapnotify binaries
+FROM docker.io/golang:1.25-trixie AS builder
+
+# Force apt-get to run completely silently without waiting for user input
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ARGs for the UID and GID of the host user to avoid ownership issues
+ARG HOST_UID
+ARG HOST_GID
+
+ARG version
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean; \
+    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        libnotmuch-dev \
+        scdoc \
+    && groupadd -g ${HOST_GID} aerc \
+    && useradd --create-home --shell /bin/bash -u ${HOST_UID} -g ${HOST_GID} aerc \
+    && passwd --delete aerc
+
+WORKDIR /home/aerc/aerc
+USER aerc
+
+# Download and build aerc
+ADD --chown=aerc:aerc https://git.sr.ht/~rjarry/aerc/archive/${version}.tar.gz aerc.tar.gz
+RUN tar xzf aerc.tar.gz --strip-components=1
+RUN gmake && gmake install PREFIX=~/.local
+
+# Build goimapnotify as the same user
+RUN go install gitlab.com/shackra/goimapnotify@2.5.4
+
+# Stage 2: Final image
+FROM docker.io/debian:latest
+
+# ARGs for the UID and GID of the host user to avoid ownership issues
+ARG HOST_UID
+ARG HOST_GID
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Boost compilation speeds by utilizing cached layers for keyring tools up front
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean; \
+    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        wget \
+    && wget -qO- https://packages.gopass.pw/repos/gopass/gopass-archive-keyring.gpg | tee /usr/share/keyrings/gopass-archive-keyring.gpg >/dev/null
+
+# Add the Gopass repository to sources.list
+RUN cat << EOF | tee /etc/apt/sources.list.d/gopass.sources
+Types: deb
+URIs: https://packages.gopass.pw/repos/gopass
+Suites: stable
+Architectures: all amd64 arm64 armhf
+Components: main
+Signed-By: /usr/share/keyrings/gopass-archive-keyring.gpg
+EOF
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean; \
+    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        bat \
+        fd-find \
+        fzf \
+        gnupg \
+        gopass \
+        gopass-archive-keyring \
+        isync \
+        khard \
+        less \
+        libsixel-bin \
+        man \
+        msmtp \
+        notmuch \
+        pandoc \
+        safecat \
+        vdirsyncer \
+        w3m \
+    && groupadd -g ${HOST_GID} aerc \
+    && useradd --create-home --shell /bin/bash -u ${HOST_UID} -g ${HOST_GID} aerc \
+    && passwd --delete aerc \
+    && mkdir -p /home/aerc/.local/state
+
+# Install Neovim from local .deb
+COPY build/neovim/nvim-linux-x86_64.deb /tmp/nvim-linux-x86_64.deb
+RUN dpkg -i /tmp/nvim-linux-x86_64.deb || apt-get install -f -y && rm /tmp/nvim-linux-x86_64.deb
+
+# Copy binaries and directories from the builder image
+COPY --from=builder --chown=aerc:aerc /home/aerc/.local/ /home/aerc/.local/
+COPY --from=builder /go/bin/goimapnotify /usr/local/bin/goimapnotify
+
+# Ensure binaries and directories are accessible by arbitrary UID
+RUN chmod -R a+rx /home/aerc \
+    && chmod -R a+rx /home/aerc/.local/bin \
+    && chmod -R a+rw /home/aerc/.local/state \
+    && chown -R aerc:aerc /home/aerc
+
+ENV PATH=/home/aerc/.local/bin:${PATH} LANG=C.UTF-8
+WORKDIR /home/aerc
+USER aerc
+
+# Set the entrypoint for the container to the aerc binary
+ENTRYPOINT ["/home/aerc/.local/bin/aerc"]
