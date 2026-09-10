@@ -1,0 +1,47 @@
+datasources:
+  data:
+    url: /data/container_data.json
+
+context:
+  container_data:
+    url: /data/container_data.json
+
+inputFiles:
+  - /input/compose/.env.tmpl
+  - /input/compose/flexo/flexo.env.tmpl
+  - /input/compose/harbor/harbor.yml.tmpl
+  - /input/compose/harbor/reset_password.sql.tmpl
+  - /input/compose/mumble/mumble.env.tmpl
+  - /input/compose/powerwall/data/pypowerwall.env.tmpl
+  - /input/compose/powerwall/data/telegraf.conf.tmpl
+  - /input/compose/powerwall/data/weather411.conf.tmpl
+  - /input/compose/rss/miniflux.env.tmpl
+  - /input/compose/smb/config.yml.tmpl
+  - /input/compose/syncthing/compose.yml.tmpl
+  - /input/compose/traefik/data/traefik.env.tmpl
+  - /input/compose/traefik/data/traefik.yml.tmpl
+  - /input/compose/vaultwarden/vault.env.tmpl
+  - /input/run/crowdin/.env.tmpl
+  - /input/systemd/snapclient/snapclient.container.tmpl
+  - /input/systemd/syncthing/syncthing1.container.tmpl
+  - /input/systemd/syncthing/syncthing2.container.tmpl
+
+outputFiles:
+  - /output/compose/.env
+  - /output/compose/flexo/flexo.env
+  - /output/compose/harbor/harbor.yml
+  - /output/compose/harbor/reset_password.sql
+  - /output/compose/mumble/mumble.env
+  - /output/compose/powerwall/data/pypowerwall.env
+  - /output/compose/powerwall/data/telegraf.conf
+  - /output/compose/powerwall/data/weather411.conf
+  - /output/compose/rss/miniflux.env
+  - /output/compose/smb/config.yml
+  - /output/compose/syncthing/compose.yml
+  - /output/compose/traefik/data/traefik.env
+  - /output/compose/traefik/data/traefik.yml
+  - /output/compose/vaultwarden/vault.env
+  - /output/run/crowdin/.env
+  - /output/systemd/snapclient/snapclient.container
+  - /output/systemd/syncthing/syncthing1.container
+  - /output/systemd/syncthing/syncthing2.container

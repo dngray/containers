@@ -1,0 +1,35 @@
+#!/bin/sh
+set -e
+
+# shellcheck source=lib/colors.sh
+. "${CONTAINER_REPO_PATH}/lib/colors.sh"
+
+if [ "$#" -lt 2 ]; then
+  error "Usage: $0 <spec-path> <build-dir> [source-paths...]"
+  exit 1
+fi
+
+SPEC_PATH="$1"
+BUILD_DIR="$2"
+shift 2
+
+if ! command -v rpmbuild >/dev/null 2>&1; then
+  error "rpmbuild not found. Install rpm-build: sudo dnf install rpm-build"
+  exit 1
+fi
+
+if ! rpm -q selinux-policy-devel >/dev/null 2>&1; then
+  error "selinux-policy-devel not found. Install: sudo dnf install selinux-policy-devel"
+  exit 1
+fi
+
+mkdir -p "${BUILD_DIR}/BUILD" "${BUILD_DIR}/RPMS" "${BUILD_DIR}/SPECS" "${BUILD_DIR}/SOURCES"
+
+cp "${SPEC_PATH}" "${BUILD_DIR}/SPECS/"
+for src in "$@"; do
+  cp "${src}" "${BUILD_DIR}/SOURCES/"
+done
+
+info "==> Building RPM..."
+rpmbuild -ba "${BUILD_DIR}/SPECS/$(basename "${SPEC_PATH}")" \
+  --define "_topdir ${BUILD_DIR}"
