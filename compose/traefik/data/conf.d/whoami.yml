@@ -1,0 +1,18 @@
+http:
+  services:
+    whoami:
+      loadBalancer:
+        servers:
+          - url: http://172.18.0.2:9999
+
+  routers:
+    whoami-secure:
+      rule: Host(`whoami.{{ env "domain" }}`)
+      entryPoints:
+        - https
+      middlewares:
+        - hsts-headers@file
+        - secure-headers@file
+      tls:
+        certResolver: stepca
+      service: whoami@file

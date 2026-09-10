@@ -1,0 +1,50 @@
+#!/bin/sh
+set -e
+
+. "${CONTAINER_REPO_PATH}/lib/colors.sh"
+
+if [ "$#" -ne 3 ]; then
+  error "Usage: $0 <module-name> <source-dir> <build-dir>"
+  exit 1
+fi
+
+MODULE_NAME="$1"
+SOURCE_DIR="$2"
+BUILD_DIR="$3"
+
+SELINUX_MAKEFILE="/usr/share/selinux/devel/Makefile"
+
+if ! [ -f "${SELINUX_MAKEFILE}" ]; then
+  error "SELinux policy development files not found. Install selinux-policy-devel: sudo dnf install selinux-policy-devel"
+  exit 1
+fi
+
+if ! command -v make >/dev/null 2>&1; then
+  error "make not found. Install make: sudo dnf install make"
+  exit 1
+fi
+
+mkdir -p "${BUILD_DIR}"
+
+WORK_DIR="$(mktemp -d)"
+trap 'rm -rf "${WORK_DIR}"' EXIT
+
+cp "${SOURCE_DIR}/${MODULE_NAME}.te" "${WORK_DIR}/"
+[ -f "${SOURCE_DIR}/${MODULE_NAME}.fc" ] && cp "${SOURCE_DIR}/${MODULE_NAME}.fc" "${WORK_DIR}/"
+[ -f "${SOURCE_DIR}/${MODULE_NAME}.if" ] && cp "${SOURCE_DIR}/${MODULE_NAME}.if" "${WORK_DIR}/"
+
+info "==> Building SELinux module: ${MODULE_NAME}..."
+make -f "${SELINUX_MAKEFILE}" -C "${WORK_DIR}" "${MODULE_NAME}.pp" >/dev/null
+
+# 🔄 Translate binary .pp package out into modern CIL text format
+/usr/libexec/selinux/hll/pp "${WORK_DIR}/${MODULE_NAME}.pp" "${WORK_DIR}/${MODULE_NAME}.cil"
+
+# 🔌 If a custom ports definition file exists, inject it natively into the CIL root scope
+if [ -f "${SOURCE_DIR}/${MODULE_NAME}.ports" ]; then
+  info "==> Injecting custom port configurations..."
+  cat "${SOURCE_DIR}/${MODULE_NAME}.ports" >>"${WORK_DIR}/${MODULE_NAME}.cil"
+fi
+
+# Export the raw, ready-to-run CIL text file to your build targets
+cp "${WORK_DIR}/${MODULE_NAME}.cil" "${BUILD_DIR}/"
+info "==> Built: ${BUILD_DIR}/${MODULE_NAME}.cil"
