@@ -1,0 +1,17 @@
+--- a/packages/opencode/script/build.ts
++++ b/packages/opencode/script/build.ts
+@@ -240,7 +240,15 @@
+       await $`zip -r ../../${key}.zip *`.cwd(`dist/${key}/bin`)
+     }
+   }
+-  await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${process.env.GH_REPO}`
++
++  // Programmatically scan for existing artifacts to bypass Bun Shell's strict glob crashing
++  const artifacts = await Array.fromAsync(new Bun.Glob("./dist/*.{zip,tar.gz}").scan());
++
++  if (artifacts.length > 0) {
++    await $`gh release upload v${Script.version} ${artifacts} --clobber --repo ${process.env.GH_REPO}`
++  } else {
++    console.log("No build artifacts found to upload.");
++  }
+ }

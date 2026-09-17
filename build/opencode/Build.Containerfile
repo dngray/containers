@@ -14,10 +14,10 @@ ENV CACHE_DIR="/mnt/host_cache" \
 
 # 1. Install build tools + system Python
 RUN --mount=type=bind,source=build/opencode/cache,target=/mnt/host_cache,rw,Z,U \
-    rm -f /etc/apt/apt.conf.d/docker-clean && \
-    mkdir -p /mnt/host_cache/apt_cache/partial && chmod 755 /mnt/host_cache/apt_cache/partial && \
-    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-debs && \
-    ln -sf /mnt/host_cache/apt_cache /var/cache/apt/archives && \
+    mkdir -p /mnt/host_cache/apt_cache && \
+    rm -f /etc/apt/apt.conf.d/*clean* && \
+    echo 'APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/01keep-debs && \
+    echo 'Dir::Cache::archives "/mnt/host_cache/apt_cache";' >> /etc/apt/apt.conf.d/01keep-debs && \
     apt-get update && apt-get install -y --no-install-recommends \
     build-essential git curl ca-certificates gnupg2 lsb-release \
     python3-pip python3-venv \
@@ -65,20 +65,25 @@ Components: main
 Signed-By: /usr/share/keyrings/postgresql.gpg
 EOF
 
-RUN apt-get update && apt-get install -y postgresql-server-dev-18
+RUN --mount=type=bind,source=build/opencode/cache,target=/mnt/host_cache,rw,Z,U \
+    apt-get update && apt-get install -y postgresql-server-dev-18
 
 # 4. Compile OpenCode from source
+ARG RESOLVED_VERSION=1.17.0
+ARG OPENCODE_TAG=v1.17.0
 WORKDIR /src/opencode
 ENV BUN_CONFIG_MAX_WORKERS=1
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 RUN cd ${CACHE_DIR}/opencode_src && \
     if [ ! -d "repo/.git" ]; then \
-        echo "📥 Repository missing. Cloning fresh copy..." && \
-        git clone --depth 1 https://github.com/anomalyco/opencode.git repo; \
+        echo "📥 Repository missing. Cloning stable release tag ${OPENCODE_TAG}..." && \
+        git clone --branch "${OPENCODE_TAG}" --depth 1 https://github.com/anomalyco/opencode.git repo; \
     else \
-        echo "🔄 Repository found. Syncing latest commits based on: $(cat /tmp/latest_commit.txt)" && \
-        cd repo && git pull; \
+        echo "🔄 Repository found. Syncing and switching to stable tag ${OPENCODE_TAG}..." && \
+        cd repo && \
+        git fetch --tags --depth 1 origin "${OPENCODE_TAG}" && \
+        git checkout FETCH_HEAD; \
     fi && \
     cp -r ${CACHE_DIR}/opencode_src/repo/. /src/opencode/
 
@@ -86,8 +91,12 @@ RUN export HOME=${CACHE_DIR}/bun && \
     bun install --backend=copyfile --ignore-scripts --network-concurrency=1
 
 RUN export HOME=${CACHE_DIR}/bun && \
+    REAL_VER="${RESOLVED_VERSION:-1.18.31}" && \
     HUSKY=0 bun run --cwd packages/core fix-node-pty && \
-    HUSKY=0 bun x turbo run build --filter=opencode --concurrency 1 && \
+    export OPENCODE_VERSION="${REAL_VER}" && \
+    export OPENCODE_CHANNEL="prod" && \
+    export HUSKY=0 && \
+    bun x turbo run build --filter=opencode --concurrency 1 --env-mode=loose -- --single && \
     mkdir -p /out && \
     cp packages/opencode/dist/opencode-linux-x64/bin/opencode /out/opencode
 
