@@ -1,0 +1,39 @@
+#!/bin/sh
+set -e
+
+# shellcheck source=lib/cli.sh
+REPO_ROOT=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
+cd "$REPO_ROOT"
+. "${REPO_ROOT}/lib/cli.sh"
+
+CONFIG=".gomplate.yaml"
+
+if [ ! -f "${CONFIG}" ]; then
+  error "${CONFIG} not found"
+  exit 1
+fi
+
+OUTPUTS=$(awk '
+  /^outputFiles:/ { in_block = 1; next }
+  in_block && /^  - \/output\// { sub(/^  - \/output\//, ""); print; next }
+  in_block {
+    print "unexpected line after outputFiles: " $0 > "/dev/stderr"
+    exit 1
+  }
+' "${CONFIG}")
+
+if [ -z "${OUTPUTS}" ]; then
+  warn "No output files listed in ${CONFIG}"
+  exit 0
+fi
+
+info "Removing generated configs from ${CONFIG} outputFiles:"
+removed=0
+for file in ${OUTPUTS}; do
+  if [ -e "${file}" ]; then
+    rm -f -- "${file}"
+    item "$(basename "${file}")" "${file}"
+    removed=$((removed + 1))
+  fi
+done
+ok "${removed} config(s) removed"

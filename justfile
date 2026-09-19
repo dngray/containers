@@ -57,6 +57,11 @@ docker-prune-net:
 template:
     podman run -v ./:/data:Z -v ./:/input:Z -v ./:/output:Z docker.io/hairyhenderson/gomplate --config=/input/.gomplate.yaml -V
 
+# Delete generated configs listed in .gomplate.yaml outputFiles
+[group('docker')]
+clean:
+    ./bin/gomplate-clean
+
 # Open mail client cluster pod (UI, sync, Proton bridge)
 [group('podman')]
 aerc:
