@@ -25,8 +25,9 @@ compose/traefik/data/traefik.yml
 compose/vaultwarden/vault.env
 container_data.json
 run/crowdin/.env
-systemd/aerc/aerc-ui.container
+systemd/aerc/aerc-bridge.container
 systemd/aerc/aerc-sync.container
+systemd/aerc/aerc-ui.container
 systemd/snapclient/snapclient.container
 systemd/syncthing/syncthing1.container
 systemd/syncthing/syncthing2.container
