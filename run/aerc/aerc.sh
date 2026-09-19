@@ -7,9 +7,8 @@ set -e
 
 UI_TAG="${REG_URL:-localhost}/library/aerc/aerc-ui:latest"
 SYNC_TAG="${REG_URL:-localhost}/library/aerc/mail-sync:latest"
-
-case "$1" in
-build)
+BRIDGE_TAG="${REG_URL:-localhost}/library/aerc/aerc-bridge:latest"
+BRIDGE_VERSION="v3.26.0"
 
 resolve_version() {
   if [ -n "${AERC_VERSION:-}" ]; then
@@ -33,7 +32,7 @@ resolve_version() {
 build_images() {
   resolve_version
 
-  info "==> 1/2 Building Interactive UI Client (${UI_TAG})..."
+  info "==> 1/3 Building Interactive UI Client (${UI_TAG})..."
   podman build -f "${CONTAINER_REPO_PATH}/build/aerc-ui/Containerfile" \
     --build-arg LANG=en_US.UTF-8 \
     --build-arg HOST_UID="${HOST_UID}" \
@@ -41,11 +40,16 @@ build_images() {
     --build-arg version="${LATEST_VERSION}" \
     -t "${UI_TAG}" "${CONTAINER_REPO_PATH}"
 
-  info "==> 2/2 Building Headless Sync Automation Daemon (${SYNC_TAG})..."
+  info "==> 2/3 Building Headless Sync Automation Daemon (${SYNC_TAG})..."
   podman build -f "${CONTAINER_REPO_PATH}/build/mail-sync/Containerfile" \
     --build-arg HOST_UID="${HOST_UID}" \
     --build-arg HOST_GID="${HOST_GID}" \
     -t "${SYNC_TAG}" "${CONTAINER_REPO_PATH}"
+
+  info "==> 3/3 Building Proton Mail Bridge Gateway (${BRIDGE_TAG})..."
+  podman build -f "${CONTAINER_REPO_PATH}/build/aerc-bridge/Containerfile" \
+    --build-arg ENV_PROTONMAIL_BRIDGE_VERSION="${BRIDGE_VERSION}" \
+    -t "${BRIDGE_TAG}" "${CONTAINER_REPO_PATH}/build/aerc-bridge"
 }
 
 case "$1" in
@@ -66,18 +70,21 @@ publish)
 
   podman tag "${UI_TAG}" "${REG_URL}/library/aerc/aerc-ui:${_hash}"
   podman tag "${SYNC_TAG}" "${REG_URL}/library/aerc/mail-sync:${_hash}"
+  podman tag "${BRIDGE_TAG}" "${REG_URL}/library/aerc/aerc-bridge:${BRIDGE_VERSION}"
 
   podman push "${UI_TAG}"
   podman push "${SYNC_TAG}"
+  podman push "${BRIDGE_TAG}"
   podman push "${REG_URL}/library/aerc/aerc-ui:${_hash}"
   podman push "${REG_URL}/library/aerc/mail-sync:${_hash}"
+  podman push "${REG_URL}/library/aerc/aerc-bridge:${BRIDGE_VERSION}"
   ok "✔ Aerc distribution loop completed!"
   ;;
 
 clean)
   warn "🧹 Purging old Aerc container components and split image assets..."
-  podman rm -f aerc-ui aerc-sync 2>/dev/null || true
-  podman image rm "${UI_TAG}" "${SYNC_TAG}" 2>/dev/null || true
+  podman rm -f aerc-ui aerc-sync aerc-bridge 2>/dev/null || true
+  podman image rm "${UI_TAG}" "${SYNC_TAG}" "${BRIDGE_TAG}" 2>/dev/null || true
   ;;
 
 *)

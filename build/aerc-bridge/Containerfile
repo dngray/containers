@@ -1,0 +1,77 @@
+# syntax=docker/dockerfile:1
+ARG GO_VERSION=1.26
+
+########################################
+# Build stage
+########################################
+FROM docker.io/golang:${GO_VERSION}-trixie AS build
+ARG ENV_PROTONMAIL_BRIDGE_VERSION=v3.26.0
+
+# Build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    build-essential \
+    libsecret-1-dev \
+    libfido2-dev \
+    libcbor-dev \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build/
+RUN git clone --depth 1 -b "$ENV_PROTONMAIL_BRIDGE_VERSION" https://github.com/ProtonMail/proton-bridge.git
+WORKDIR /build/proton-bridge/
+RUN make build-nogui
+
+########################################
+# Runtime stage
+########################################
+FROM docker.io/debian:trixie-slim
+
+ARG ENV_PROTONMAIL_BRIDGE_VERSION=v3.26.0
+LABEL maintainer="dngray" \
+      org.opencontainers.image.title="Proton Mail Bridge" \
+      org.opencontainers.image.description="Proton Mail Bridge (CLI) in Docker" \
+      org.opencontainers.image.version="$ENV_PROTONMAIL_BRIDGE_VERSION" \
+      org.opencontainers.image.source="https://github.com/dngray/containers" \
+      org.opencontainers.image.licenses="GPL-3.0-or-later"
+
+# Ports/interface the bridge itself listens on inside the container.
+ARG ENV_BRIDGE_SMTP_PORT=1025
+ARG ENV_BRIDGE_IMAP_PORT=1143
+ARG ENV_BRIDGE_HOST=127.0.0.1
+ARG ENV_CONTAINER_SMTP_PORT=25
+ARG ENV_CONTAINER_IMAP_PORT=143
+ENV PROTON_BRIDGE_SMTP_PORT=$ENV_BRIDGE_SMTP_PORT \
+    PROTON_BRIDGE_IMAP_PORT=$ENV_BRIDGE_IMAP_PORT \
+    PROTON_BRIDGE_HOST=$ENV_BRIDGE_HOST \
+    CONTAINER_SMTP_PORT=$ENV_CONTAINER_SMTP_PORT \
+    CONTAINER_IMAP_PORT=$ENV_CONTAINER_IMAP_PORT \
+    ENV_PROTONMAIL_BRIDGE_VERSION=$ENV_PROTONMAIL_BRIDGE_VERSION
+
+# Runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    socat \
+    net-tools \
+    procps \
+    pass \
+    ca-certificates \
+    libsecret-1-0 \
+    libfido2-1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app/
+COPY --from=build /build/proton-bridge/bridge /build/proton-bridge/proton-bridge /app/
+COPY --chmod=755 entrypoint.sh /app/
+COPY GPGparams.txt /app/
+
+# Default forwarded ports (remap with CONTAINER_SMTP_PORT / CONTAINER_IMAP_PORT).
+EXPOSE 25/tcp 143/tcp
+
+# Volume to save pass and bridge configurations/data
+VOLUME /root
+
+HEALTHCHECK --interval=60s --timeout=5s --start-period=60s --retries=3 \
+    CMD bash -c "exec 3<>/dev/tcp/127.0.0.1/${CONTAINER_SMTP_PORT}" || exit 1
+
+ENTRYPOINT ["/app/entrypoint.sh"]
