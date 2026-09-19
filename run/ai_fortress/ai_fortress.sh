@@ -1,7 +1,6 @@
 #!/bin/sh
 set -e
 
-# 1. Boot up our shared coloring engine from the central library folder (Updated to Singular)
 . "${CONTAINER_REPO_PATH}/lib/colors.sh"
 
 COMPILER_IMG="${REG_URL}/library/opencode/opencode-compiler"
@@ -21,6 +20,16 @@ resolve_version() {
       LATEST_VERSION="1.17.0"
     else
       ok " Found current production release version: ${LATEST_VERSION}"
+    fi
+  fi
+
+  if [ "${OPENCODE_SOURCE:-compiled}" = "official" ] && [ -n "${OPENCODE_TAG:-}" ]; then
+    local _hash
+    _hash=$(git ls-remote "https://github.com/anomalyco/opencode.git" "refs/tags/${OPENCODE_TAG}^{}" 2>/dev/null | cut -c1-7 || true)
+    if [ -n "${_hash}" ]; then
+      ok " Locked hash for official binary tag ${OPENCODE_TAG}: ${_hash}"
+    else
+      warn " Could not resolve official tag hash; leaving to compiler–runtime baseline..."
     fi
   fi
 }
@@ -85,6 +94,38 @@ opencode-publish)
   podman tag "${TUI_IMG}:latest" "${TUI_IMG}:${_hash}"
 
   resolve_version
+  podman push "${COMPILER_IMG}:latest"
+  podman push "${COMPILER_IMG}:${LATEST_VERSION}"
+  podman push "${COMPILER_IMG}:${_hash}"
+
+  podman push "${SERVER_IMG}:latest"
+  podman push "${SERVER_IMG}:${LATEST_VERSION}"
+  podman push "${SERVER_IMG}:${_hash}"
+
+  podman push "${TUI_IMG}:latest"
+  podman push "${TUI_IMG}:${LATEST_VERSION}"
+  podman push "${TUI_IMG}:${_hash}"
+
+  ok "✔ Opencode distribution loop completed!"
+  ;;
+
+opencode-binary-publish)
+  OPENCODE_SOURCE="official"
+  OPENCODE_TAG="v1.18.31"
+  OPENCODE_OFFICIAL_SHA256="e9312be75ed803b7415fc2aeabda1f4fe938912a39673762dc0c38c0e11ebde4"
+
+  info "==> Validating pinned Opencode official release artifact signature..."
+  export OPENCODE_SOURCE OPENCODE_TAG
+  resolve_version
+
+  "$0" build-compiler
+  "$0" build-server
+  "$0" build-tui
+
+  podman tag "${COMPILER_IMG}:latest" "${COMPILER_IMG}:${_hash}"
+  podman tag "${SERVER_IMG}:latest" "${SERVER_IMG}:${_hash}"
+  podman tag "${TUI_IMG}:latest" "${TUI_IMG}:${_hash}"
+
   podman push "${COMPILER_IMG}:latest"
   podman push "${COMPILER_IMG}:${LATEST_VERSION}"
   podman push "${COMPILER_IMG}:${_hash}"

@@ -12,7 +12,7 @@ ENV CACHE_DIR="/mnt/host_cache" \
     RUSTUP_HOME="/opt/rustup" \
     PATH="/mnt/host_cache/cargo/bin:/opt/python-${PYTHON_VERSION}/bin:${PATH}"
 
-# 1. Install build tools + system Python
+# Install build tools + system Python
 RUN --mount=type=bind,source=build/opencode/cache,target=/mnt/host_cache,rw,Z,U \
     mkdir -p /mnt/host_cache/apt_cache && \
     rm -f /etc/apt/apt.conf.d/*clean* && \
@@ -25,11 +25,11 @@ RUN --mount=type=bind,source=build/opencode/cache,target=/mnt/host_cache,rw,Z,U 
     liblzma-dev libffi-dev \
     clang-19 llvm-19 llvm-19-dev
 
-# 2. Setup Sigstore
+# Setup Sigstore
 RUN python3 -m venv /opt/sigstore-venv && \
     /opt/sigstore-venv/bin/pip install sigstore
 
-# 3. Download, Verify, and Compile Python
+# Download, Verify, and Compile Python
 RUN if [ -f "${CACHE_DIR}/python_src/Python-${PYTHON_VERSION}.tar.xz" ]; then \
         cp "${CACHE_DIR}/python_src/Python-${PYTHON_VERSION}.tar.xz" /tmp/ && \
         cp "${CACHE_DIR}/python_src/Python-${PYTHON_VERSION}.tar.xz.sigstore" /tmp/; \
@@ -68,10 +68,28 @@ EOF
 RUN --mount=type=bind,source=build/opencode/cache,target=/mnt/host_cache,rw,Z,U \
     apt-get update && apt-get install -y postgresql-server-dev-18
 
-# 4. Compile OpenCode from source
+# Compile OpenCode from official use binary
 ARG RESOLVED_VERSION=1.17.0
 ARG OPENCODE_TAG=v1.17.0
 WORKDIR /src/opencode
+
+RUN set -e; \
+    if [ "${OPENCODE_SOURCE}" = "official" ]; then \
+        echo "📥 Resolving pinned official OpenCode release digest (${OPENCODE_TAG})..." && \
+        _digest=$(curl -fsSL "https://api.github.com/repos/anomalyco/opencode/releases/tags/${OPENCODE_TAG}" | \
+                  jq -r '.assets[] | select(.name == "opencode-linux-x64.tar.gz") | .digest') && \
+        echo "🔒 Digest locked: ${_digest}" && \
+        curl -fL --retry 3 -o /tmp/opencode-linux-x64.tar.gz \
+          "https://github.com/anomalyco/opencode/releases/download/${OPENCODE_TAG}/opencode-linux-x64.tar.gz" && \
+        echo "${_digest}  /tmp/opencode-linux-x64.tar.gz" | sha256sum -c - && \
+        mkdir -p /out && \
+        tar -xzf /tmp/opencode-linux-x64.tar.gz -C /out && \
+        chmod +x /out/opencode && \
+        rm -f /tmp/opencode-linux-x64.tar.gz; \
+    else \
+        echo "🧱 Compiling OpenCode from source (${OPENCODE_TAG})..."; \
+    fi
+
 ENV BUN_CONFIG_MAX_WORKERS=1
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
@@ -100,7 +118,7 @@ RUN export HOME=${CACHE_DIR}/bun && \
     mkdir -p /out && \
     cp packages/opencode/dist/opencode-linux-x64/bin/opencode /out/opencode
 
-# 5. Compile pgvector
+# Compile pgvector
 WORKDIR /src/pgvector
 
 ARG PGVECTOR_VERSION=0.8.2

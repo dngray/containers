@@ -144,6 +144,7 @@ opencode-compiler) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" build
 opencode-server) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" build-server ;;
 opencode-tui) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" build-tui ;;
 opencode-publish) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" opencode-publish ;;
+opencode-binary-publish) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" opencode-binary-publish ;;
 fortress-clean) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" clean-opencode ;;
 
 goose-server) "${CONTAINER_REPO_PATH}/run/ai_fortress/ai_fortress.sh" build-goose-server ;;
@@ -241,6 +242,7 @@ tftp-clean)
   item "opencode-server" "Assemble backend tool server"
   item "opencode-tui" "Extract compiled app into unprivileged local TUI"
   item "opencode-publish" "Push Opencode server and TUI images to container registry"
+  item "opencode-binary-publish" "Bake official OpenCode binary, then push server and TUI imagery"
   item "goose-server" "Build centralized Goose AI Server"
   item "goose-cli" "Build terminal interface for Goose agent"
   item "goose-publish" "Push Goose server and CLI images to container registry"
