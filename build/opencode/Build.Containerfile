@@ -12,24 +12,24 @@ ENV CACHE_DIR="/mnt/host_cache" \
     RUSTUP_HOME="/opt/rustup" \
     PATH="/mnt/host_cache/cargo/bin:/opt/python-${PYTHON_VERSION}/bin:${PATH}"
 
-# 1. Install build tools + system Python
+# Install build tools + system Python
 RUN --mount=type=bind,source=build/opencode/cache,target=/mnt/host_cache,rw,Z,U \
-    rm -f /etc/apt/apt.conf.d/docker-clean && \
-    mkdir -p /mnt/host_cache/apt_cache/partial && chmod 755 /mnt/host_cache/apt_cache/partial && \
-    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-debs && \
-    ln -sf /mnt/host_cache/apt_cache /var/cache/apt/archives && \
+    mkdir -p /mnt/host_cache/apt_cache && \
+    rm -f /etc/apt/apt.conf.d/*clean* && \
+    echo 'APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/01keep-debs && \
+    echo 'Dir::Cache::archives "/mnt/host_cache/apt_cache";' >> /etc/apt/apt.conf.d/01keep-debs && \
     apt-get update && apt-get install -y --no-install-recommends \
-    build-essential git curl ca-certificates gnupg2 lsb-release \
+    build-essential git curl ca-certificates gnupg2 jq lsb-release \
     python3-pip python3-venv \
     libssl-dev zlib1g-dev libncurses5-dev libreadline-dev libsqlite3-dev \
     liblzma-dev libffi-dev \
     clang-19 llvm-19 llvm-19-dev
 
-# 2. Setup Sigstore
+# Setup Sigstore
 RUN python3 -m venv /opt/sigstore-venv && \
     /opt/sigstore-venv/bin/pip install sigstore
 
-# 3. Download, Verify, and Compile Python
+# Download, Verify, and Compile Python
 RUN if [ -f "${CACHE_DIR}/python_src/Python-${PYTHON_VERSION}.tar.xz" ]; then \
         cp "${CACHE_DIR}/python_src/Python-${PYTHON_VERSION}.tar.xz" /tmp/ && \
         cp "${CACHE_DIR}/python_src/Python-${PYTHON_VERSION}.tar.xz.sigstore" /tmp/; \
@@ -65,33 +65,60 @@ Components: main
 Signed-By: /usr/share/keyrings/postgresql.gpg
 EOF
 
-RUN apt-get update && apt-get install -y postgresql-server-dev-18
+RUN --mount=type=bind,source=build/opencode/cache,target=/mnt/host_cache,rw,Z,U \
+    apt-get update && apt-get install -y postgresql-server-dev-18
 
-# 4. Compile OpenCode from source
+# Compile OpenCode from binary release or source
+ARG RESOLVED_VERSION=1.17.0
+ARG OPENCODE_TAG=v1.17.0
+ARG OPENCODE_SOURCE=source
 WORKDIR /src/opencode
+
 ENV BUN_CONFIG_MAX_WORKERS=1
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
-RUN cd ${CACHE_DIR}/opencode_src && \
-    if [ ! -d "repo/.git" ]; then \
-        echo "📥 Repository missing. Cloning fresh copy..." && \
-        git clone --depth 1 https://github.com/anomalyco/opencode.git repo; \
+RUN set -e; \
+    if [ "${OPENCODE_SOURCE}" = "binary" ]; then \
+        echo "📥 Resolving pinned binary OpenCode release digest (${OPENCODE_TAG})..." && \
+        _digest=$(curl -fsSL "https://api.github.com/repos/anomalyco/opencode/releases/tags/${OPENCODE_TAG}" | \
+                  jq -r '.assets[] | select(.name == "opencode-linux-x64.tar.gz") | .digest') && \
+        echo "🔒 Digest locked: ${_digest}" && \
+        curl -fL --retry 3 -o /tmp/opencode-linux-x64.tar.gz \
+          "https://github.com/anomalyco/opencode/releases/download/${OPENCODE_TAG}/opencode-linux-x64.tar.gz" && \
+        echo "${_digest#sha256:}  /tmp/opencode-linux-x64.tar.gz" | sha256sum -c - && \
+        mkdir -p /out && \
+        tar -xzf /tmp/opencode-linux-x64.tar.gz -C /out && \
+        chmod +x /out/opencode && \
+        rm -f /tmp/opencode-linux-x64.tar.gz; \
+    elif [ "${OPENCODE_SOURCE}" = "source" ]; then \
+        echo "🧱 Compiling OpenCode from source (${OPENCODE_TAG})..." && \
+        cd ${CACHE_DIR}/opencode_src && \
+        if [ ! -d "repo/.git" ]; then \
+            echo "📥 Repository missing. Cloning stable release tag ${OPENCODE_TAG}..." && \
+            git clone --branch "${OPENCODE_TAG}" --depth 1 https://github.com/anomalyco/opencode.git repo; \
+        else \
+            echo "🔄 Repository found. Syncing and switching to stable tag ${OPENCODE_TAG}..." && \
+            cd repo && \
+            git fetch --tags --depth 1 origin "${OPENCODE_TAG}" && \
+            git checkout FETCH_HEAD; \
+        fi && \
+        cp -r ${CACHE_DIR}/opencode_src/repo/. /src/opencode/ && \
+        export HOME=${CACHE_DIR}/bun && \
+        bun install --backend=copyfile --ignore-scripts --network-concurrency=1 && \
+        REAL_VER="${RESOLVED_VERSION:-1.18.31}" && \
+        HUSKY=0 bun run --cwd packages/core fix-node-pty && \
+        export OPENCODE_VERSION="${REAL_VER}" && \
+        export OPENCODE_CHANNEL="prod" && \
+        export HUSKY=0 && \
+        bun x turbo run build --filter=opencode --concurrency 1 --env-mode=loose -- --single && \
+        mkdir -p /out && \
+        cp packages/opencode/dist/opencode-linux-x64/bin/opencode /out/opencode; \
     else \
-        echo "🔄 Repository found. Syncing latest commits based on: $(cat /tmp/latest_commit.txt)" && \
-        cd repo && git pull; \
-    fi && \
-    cp -r ${CACHE_DIR}/opencode_src/repo/. /src/opencode/
+        echo "Unknown OPENCODE_SOURCE: '${OPENCODE_SOURCE}' (expected binary or source)" >&2; \
+        exit 1; \
+    fi
 
-RUN export HOME=${CACHE_DIR}/bun && \
-    bun install --backend=copyfile --ignore-scripts --network-concurrency=1
-
-RUN export HOME=${CACHE_DIR}/bun && \
-    HUSKY=0 bun run --cwd packages/core fix-node-pty && \
-    HUSKY=0 bun x turbo run build --filter=opencode --concurrency 1 && \
-    mkdir -p /out && \
-    cp packages/opencode/dist/opencode-linux-x64/bin/opencode /out/opencode
-
-# 5. Compile pgvector
+# Compile pgvector
 WORKDIR /src/pgvector
 
 ARG PGVECTOR_VERSION=0.8.2

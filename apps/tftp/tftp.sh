@@ -1,7 +1,8 @@
 #!/bin/sh
 set -e
 
-. "${CONTAINER_REPO_PATH}/lib/colors.sh"
+REPO_ROOT=$(CDPATH= cd "$(dirname "$0")/../.." && pwd)
+. "${REPO_ROOT}/lib/cli.sh"
 
 TFTP_IMG="${REG_URL:-localhost}/library/tftpd-hpa:local"
 
@@ -10,16 +11,16 @@ TFTP_DIR="/tmp/tftpboot"
 case "$1" in
 build)
   info "==> Building Hardened TFTP server container..."
-  podman build -f "${CONTAINER_REPO_PATH}/build/tftp/Containerfile" \
-    -t "${TFTP_IMG}" "${CONTAINER_REPO_PATH}/build/tftp"
+  podman build -f "${REPO_ROOT}/build/tftp/Containerfile" \
+    -t "${TFTP_IMG}" "${REPO_ROOT}/build/tftp"
   ;;
 
 run)
   mkdir -p "${TFTP_DIR}"
   info "==> Ensuring image is available in rootful storage..."
   if ! run0 podman image exists "${TFTP_IMG}" 2>/dev/null; then
-    run0 podman build -f "${CONTAINER_REPO_PATH}/build/tftp/Containerfile" \
-      -t "${TFTP_IMG}" "${CONTAINER_REPO_PATH}/build/tftp"
+    run0 podman build -f "${REPO_ROOT}/build/tftp/Containerfile" \
+      -t "${TFTP_IMG}" "${REPO_ROOT}/build/tftp"
   fi
   info "==> Launching TFTP daemon server (rootful)..."
   run0 podman run -d --replace --network host \

@@ -1,15 +1,16 @@
 #!/bin/sh
 set -e
 
-# Pull colors from the central repository library folder
-. "${CONTAINER_REPO_PATH}/lib/colors.sh"
+# shellcheck source=lib/cli.sh
+REPO_ROOT=$(CDPATH= cd "$(dirname "$0")/../.." && pwd)
+. "${REPO_ROOT}/lib/cli.sh"
 
 case "$1" in
 build)
   info "==> Assembling custom DavMail translator gateway..."
   # Explicitly points to your unified repository folder tree paths
-  podman build -f "${CONTAINER_REPO_PATH}/run/davmail/Dockerfile" \
-    -t davmail:latest "${CONTAINER_REPO_PATH}/run/davmail"
+  podman build -f "${REPO_ROOT}/apps/davmail/Dockerfile" \
+    -t davmail:latest "${REPO_ROOT}/apps/davmail"
   ;;
 
 run)

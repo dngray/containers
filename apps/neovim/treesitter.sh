@@ -1,19 +1,19 @@
 #!/bin/sh
 set -e
 
-# Pull colors from the central repository library folder
-# shellcheck source=lib/colors.sh
-. "${CONTAINER_REPO_PATH}/lib/colors.sh"
+# shellcheck source=lib/cli.sh
+REPO_ROOT=$(CDPATH= cd "$(dirname "$0")/../.." && pwd)
+. "${REPO_ROOT}/lib/cli.sh"
 
 IMAGE_TAG="local-nvim-compiler:latest"
 
 case "$1" in
 build)
   info "==> Compiling isolated, immutable local Neovim build environment..."
-  podman build -f "${CONTAINER_REPO_PATH}/build/neovim/Containerfile" \
+  podman build -f "${REPO_ROOT}/build/neovim/Containerfile" \
     --build-arg HOST_UID="${HOST_UID}" \
     --build-arg HOST_GID="${HOST_GID}" \
-    -t "${IMAGE_TAG}" "${CONTAINER_REPO_PATH}"
+    -t "${IMAGE_TAG}" "${REPO_ROOT}"
   ok "Custom compiler image built successfully."
   ;;
 
