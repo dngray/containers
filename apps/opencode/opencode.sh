@@ -22,14 +22,18 @@ resolve_version() {
     fi
   fi
 
-  if [ "${OPENCODE_SOURCE:-compiled}" = "official" ] && [ -n "${OPENCODE_TAG:-}" ]; then
-    local _hash
-    _hash=$(git ls-remote "https://github.com/anomalyco/opencode.git" "refs/tags/${OPENCODE_TAG}^{}" 2>/dev/null | cut -c1-7 || true)
-    if [ -n "${_hash}" ]; then
-      ok " Locked hash for official binary tag ${OPENCODE_TAG}: ${_hash}"
-    else
-      warn " Could not resolve official tag hash; leaving to compiler–runtime baseline..."
-    fi
+  resolved_tag="${OPENCODE_TAG:-v${LATEST_VERSION}}"
+  RESOLVED_HASH=$(git ls-remote "https://github.com/anomalyco/opencode.git" "refs/tags/${resolved_tag}^{}" 2>/dev/null | cut -c1-7 || true)
+  if [ -z "${RESOLVED_HASH}" ]; then
+    RESOLVED_HASH=$(git ls-remote "https://github.com/anomalyco/opencode.git" "refs/tags/${resolved_tag}" 2>/dev/null | cut -c1-7 || true)
+  fi
+  if [ -z "${RESOLVED_HASH}" ]; then
+    RESOLVED_HASH=$(git ls-remote "https://github.com/anomalyco/opencode.git" HEAD 2>/dev/null | cut -c1-7 || true)
+  fi
+  if [ -n "${RESOLVED_HASH}" ]; then
+    ok " Locked hash for tag ${resolved_tag}: ${RESOLVED_HASH}"
+  else
+    warn " Could not resolve tag hash for ${resolved_tag}; leaving to compiler–runtime baseline..."
   fi
 }
 
@@ -44,7 +48,7 @@ compiler)
   info "==> Compiling Opencode Source Assets..."
   podman build -f "${REPO_ROOT}/build/opencode/Build.Containerfile" \
     --build-arg RESOLVED_VERSION="${LATEST_VERSION}" \
-    --build-arg OPENCODE_TAG="v${LATEST_VERSION}" \
+    --build-arg OPENCODE_TAG="${OPENCODE_TAG:-v${LATEST_VERSION}}" \
     --build-arg OPENCODE_SOURCE="${OPENCODE_SOURCE:-source}" \
     -v "${REPO_ROOT}/build/opencode/cache:/mnt/host_cache:z" \
     -t "${COMPILER_IMG}:latest" \
@@ -85,25 +89,24 @@ publish)
   "$0" compiler
   "$0" server
   "$0" tui
-  _hash=$(git ls-remote https://github.com/anomalyco/opencode.git HEAD | cut -c1-7)
-  warn "==> Distributing Opencode [${_hash}] container imagery..."
-
-  podman tag "${COMPILER_IMG}:latest" "${COMPILER_IMG}:${_hash}"
-  podman tag "${SERVER_IMG}:latest" "${SERVER_IMG}:${_hash}"
-  podman tag "${TUI_IMG}:latest" "${TUI_IMG}:${_hash}"
-
   resolve_version
+  warn "==> Distributing Opencode [${RESOLVED_HASH}] container imagery..."
+
+  podman tag "${COMPILER_IMG}:latest" "${COMPILER_IMG}:${RESOLVED_HASH}"
+  podman tag "${SERVER_IMG}:latest" "${SERVER_IMG}:${RESOLVED_HASH}"
+  podman tag "${TUI_IMG}:latest" "${TUI_IMG}:${RESOLVED_HASH}"
+
   podman push "${COMPILER_IMG}:latest"
   podman push "${COMPILER_IMG}:${LATEST_VERSION}"
-  podman push "${COMPILER_IMG}:${_hash}"
+  podman push "${COMPILER_IMG}:${RESOLVED_HASH}"
 
   podman push "${SERVER_IMG}:latest"
   podman push "${SERVER_IMG}:${LATEST_VERSION}"
-  podman push "${SERVER_IMG}:${_hash}"
+  podman push "${SERVER_IMG}:${RESOLVED_HASH}"
 
   podman push "${TUI_IMG}:latest"
   podman push "${TUI_IMG}:${LATEST_VERSION}"
-  podman push "${TUI_IMG}:${_hash}"
+  podman push "${TUI_IMG}:${RESOLVED_HASH}"
 
   ok "✔ Opencode distribution loop completed!"
   ;;
@@ -120,21 +123,21 @@ binary-publish)
   "$0" server
   "$0" tui
 
-  podman tag "${COMPILER_IMG}:latest" "${COMPILER_IMG}:${_hash}"
-  podman tag "${SERVER_IMG}:latest" "${SERVER_IMG}:${_hash}"
-  podman tag "${TUI_IMG}:latest" "${TUI_IMG}:${_hash}"
+  podman tag "${COMPILER_IMG}:latest" "${COMPILER_IMG}:${RESOLVED_HASH}"
+  podman tag "${SERVER_IMG}:latest" "${SERVER_IMG}:${RESOLVED_HASH}"
+  podman tag "${TUI_IMG}:latest" "${TUI_IMG}:${RESOLVED_HASH}"
 
   podman push "${COMPILER_IMG}:latest"
   podman push "${COMPILER_IMG}:${LATEST_VERSION}"
-  podman push "${COMPILER_IMG}:${_hash}"
+  podman push "${COMPILER_IMG}:${RESOLVED_HASH}"
 
   podman push "${SERVER_IMG}:latest"
   podman push "${SERVER_IMG}:${LATEST_VERSION}"
-  podman push "${SERVER_IMG}:${_hash}"
+  podman push "${SERVER_IMG}:${RESOLVED_HASH}"
 
   podman push "${TUI_IMG}:latest"
   podman push "${TUI_IMG}:${LATEST_VERSION}"
-  podman push "${TUI_IMG}:${_hash}"
+  podman push "${TUI_IMG}:${RESOLVED_HASH}"
 
   ok "✔ Opencode distribution loop completed!"
   ;;

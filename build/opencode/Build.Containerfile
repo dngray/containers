@@ -19,7 +19,7 @@ RUN --mount=type=bind,source=build/opencode/cache,target=/mnt/host_cache,rw,Z,U 
     echo 'APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/01keep-debs && \
     echo 'Dir::Cache::archives "/mnt/host_cache/apt_cache";' >> /etc/apt/apt.conf.d/01keep-debs && \
     apt-get update && apt-get install -y --no-install-recommends \
-    build-essential git curl ca-certificates gnupg2 lsb-release \
+    build-essential git curl ca-certificates gnupg2 jq lsb-release \
     python3-pip python3-venv \
     libssl-dev zlib1g-dev libncurses5-dev libreadline-dev libsqlite3-dev \
     liblzma-dev libffi-dev \
