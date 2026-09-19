@@ -1,5 +1,5 @@
 #!/bin/bash
-# ~/.local/bin/ai-secure
+# containers/bin/ai-secure
 
 # 1. Identity & Path Resolution
 CUR_UID=$(id -u)

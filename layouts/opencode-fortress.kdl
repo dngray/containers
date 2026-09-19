@@ -23,7 +23,7 @@ layout {
                 // Active interactive window (Pure Bash /dev/tcp socket connection test)
                 pane name="OpenCode TUI" {
                     command "bash"
-                    args "-c" "until (echo > /dev/tcp/127.0.0.1/4096) >/dev/null 2>&1; do sleep 0.1; done; ai-secure shell"
+                    args "-c" "until (echo > /dev/tcp/127.0.0.1/4096) >/dev/null 2>&1; do sleep 0.5; done; ai-secure shell"
                     focus true
                 }
             }
