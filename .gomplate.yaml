@@ -24,6 +24,7 @@ inputFiles:
   - /input/run/crowdin/.env.tmpl
   - /input/systemd/aerc/aerc-ui.container.tmpl
   - /input/systemd/aerc/aerc-sync.container.tmpl
+  - /input/systemd/aerc/aerc-bridge.container.tmpl
   - /input/systemd/snapclient/snapclient.container.tmpl
   - /input/systemd/syncthing/syncthing1.container.tmpl
   - /input/systemd/syncthing/syncthing2.container.tmpl
@@ -46,6 +47,7 @@ outputFiles:
   - /output/run/crowdin/.env
   - /output/systemd/aerc/aerc-ui.container
   - /output/systemd/aerc/aerc-sync.container
+  - /output/systemd/aerc/aerc-bridge.container
   - /output/systemd/snapclient/snapclient.container
   - /output/systemd/syncthing/syncthing1.container
   - /output/systemd/syncthing/syncthing2.container
