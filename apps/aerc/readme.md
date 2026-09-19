@@ -22,13 +22,13 @@ reproducibility.
 
 ```bash
 # Build the UI, sync, and Proton bridge images
-bin/manage-containers aerc-build
+just aerc-build
 
 # Start the pod (UI, sync, bridge) and open the TUI
-bin/manage-containers aerc
+just aerc
 ```
 
-Stop everything with `bin/manage-containers aerc-down`.
+Stop everything with `just aerc-down`.
 
 ## First run: log in to your Proton account
 
@@ -149,8 +149,8 @@ Notes:
 
 ## Updating the pinned bridge build
 
-`BRIDGE_VERSION` in `run/aerc/aerc.sh` and `ARG ENV_PROTONMAIL_BRIDGE_VERSION`
+`BRIDGE_VERSION` in `apps/aerc/aerc.sh` and `ARG ENV_PROTONMAIL_BRIDGE_VERSION`
 in `build/aerc-bridge/Containerfile` are pinned. To bump:
 
 1. Check the latest release: `https://github.com/ProtonMail/proton-bridge/releases/latest`
-2. Update both pins, then `bin/manage-containers aerc-build` and restart the bridge.
+2. Update both pins, then `just aerc-build` and restart the bridge.

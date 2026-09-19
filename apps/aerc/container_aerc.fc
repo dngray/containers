@@ -1,4 +1,4 @@
-# run/aerc/container_aerc.fc
+# apps/aerc/container_aerc.fc
 
 HOME_DIR/\.local/share/mail(/.*)?          gen_context(system_u:object_r:aerc_data_t,s0)
 HOME_DIR/\.local/share/address-book(/.*)?  gen_context(system_u:object_r:aerc_data_t,s0)

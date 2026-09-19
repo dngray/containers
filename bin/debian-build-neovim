@@ -3,11 +3,11 @@ set -e
 
 NEOVIM_REPO="neovim/neovim"
 
-REPO_PATH="${CONTAINERS_REPO_PATH:-$(cd "$(dirname "$0")/.." && pwd)}"
-. "${REPO_PATH}/lib/colors.sh"
+REPO_ROOT=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
+. "${REPO_ROOT}/lib/cli.sh"
 
-BUILD_DIR="${REPO_PATH}/build/aerc"
-TEMP_DIR="${REPO_PATH}/build/neovim"
+BUILD_DIR="${REPO_ROOT}/build/aerc"
+TEMP_DIR="${REPO_ROOT}/build/neovim"
 
 fetch_latest_version() {
   curl -sfL "https://api.github.com/repos/${NEOVIM_REPO}/releases/latest" |

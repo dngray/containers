@@ -15,9 +15,11 @@ RUN ln -s "/opt/python-${PYTHON_VERSION}/bin/python3" /usr/local/bin/python3 && 
     ln -s "/opt/python-${PYTHON_VERSION}/bin/python3" /usr/local/bin/python${PYTHON_VERSION}
 
 # 2. Restore runtime dependencies
-RUN rm -f /etc/apt/apt.conf.d/docker-clean && \
-    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-debs && \
-    ln -sf /mnt/host_cache/apt_cache /var/cache/apt/archives && \
+RUN --mount=type=bind,source=build/opencode/cache,target=/mnt/host_cache,rw,Z,U \
+    mkdir -p /mnt/host_cache/apt_cache && \
+    rm -f /etc/apt/apt.conf.d/*clean* && \
+    echo 'APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/01keep-debs && \
+    echo 'Dir::Cache::archives "/mnt/host_cache/apt_cache";' >> /etc/apt/apt.conf.d/01keep-debs && \
     apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl gnupg2 lsb-release gcc libc6-dev \
     coreutils fd-find findutils fzf gawk git jq ripgrep sed util-linux \
@@ -34,9 +36,7 @@ ENV CURL_CA_BUNDLE="/etc/ssl/certs/ca-certificates.crt" \
 COPY --from=$COMPILER_IMAGE /usr/share/keyrings/postgresql.gpg /usr/share/keyrings/postgresql.gpg
 COPY --from=$COMPILER_IMAGE /etc/apt/sources.list.d/pgdg.sources /etc/apt/sources.list.d/pgdg.sources
 
-RUN rm -f /etc/apt/apt.conf.d/docker-clean && \
-    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-debs && \
-    ln -sf /mnt/host_cache/apt_cache /var/cache/apt/archives && \
+RUN --mount=type=bind,source=build/opencode/cache,target=/mnt/host_cache,rw,Z,U \
     apt-get update && apt-get install -y postgresql-client-18 libpq-dev
 
 # 3. Copy Compiled Assets straight from compiler image layout
@@ -52,14 +52,12 @@ RUN groupadd -f -g $HOST_GID opencode || true && \
 WORKDIR /home/opencode/workspace
 
 # 6. Python Dependency Step
-RUN uv pip install \
+RUN --mount=type=bind,source=build/opencode/cache,target=/mnt/host_cache,rw,Z,U \
+    uv pip install \
     --system \
     --cache-dir /mnt/host_cache/uv \
     --compile-bytecode \
     maturin puccinialin numpy psycopg psycopg_pool pytest fastembed pandas && \
-    rm -f /etc/apt/apt.conf.d/docker-clean && \
-    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-debs && \
-    ln -sf /mnt/host_cache/apt_cache /var/cache/apt/archives && \
     apt-get update && apt-get install -y --no-install-recommends nodejs npm && \
     rm -rf /home/opencode/workspace/.uv_cache \
            /home/opencode/.npm \

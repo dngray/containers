@@ -1,7 +1,8 @@
 #!/bin/sh
 set -e
 
-. "${CONTAINER_REPO_PATH}/lib/colors.sh"
+REPO_ROOT=$(CDPATH= cd "$(dirname "$0")/../.." && pwd)
+. "${REPO_ROOT}/lib/cli.sh"
 
 SNAPCLIENT_IMG="${REG_URL:-localhost}/library/snapclient:latest"
 PUBLISH_IMG="${REG_URL}/library/snapclient:latest"
@@ -9,8 +10,8 @@ PUBLISH_IMG="${REG_URL}/library/snapclient:latest"
 case "$1" in
 build)
   info "==> Building Snapcast client container..."
-  podman build -f "${CONTAINER_REPO_PATH}/build/snapclient/Dockerfile" \
-    -t "${SNAPCLIENT_IMG}" "${CONTAINER_REPO_PATH}/build/snapclient"
+  podman build -f "${REPO_ROOT}/build/snapclient/Dockerfile" \
+    -t "${SNAPCLIENT_IMG}" "${REPO_ROOT}/build/snapclient"
   ;;
 
 publish)
