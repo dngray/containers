@@ -1,13 +1,12 @@
 #!/bin/sh
 set -e
 
-. "${CONTAINER_REPO_PATH}/lib/colors.sh"
+REPO_ROOT=$(CDPATH= cd "$(dirname "$0")/../.." && pwd)
+. "${REPO_ROOT}/lib/cli.sh"
 
 COMPILER_IMG="${REG_URL}/library/opencode/opencode-compiler"
 SERVER_IMG="${REG_URL}/library/opencode/opencode-server"
 TUI_IMG="${REG_URL}/library/opencode/opencode-tui"
-GOOSE_SERVER_IMG="${REG_URL}/library/goose/goose-server"
-GOOSE_CLI_IMG="${REG_URL}/library/goose/goose-cli"
 
 resolve_version() {
   if [ -z "${LATEST_VERSION:-}" ]; then
@@ -35,57 +34,57 @@ resolve_version() {
 }
 
 case "$1" in
-# ── Opencode Actions ──
-build-compiler)
+compiler)
   info "==> Checking remote GitHub tracking layers..."
-  mkdir -p "${CONTAINER_REPO_PATH}/build/opencode/cache"/{apt_cache/partial,python_src,opencode_src,pgvector_src,bun,cargo}
-  git ls-remote https://github.com/anomalyco/opencode.git HEAD | awk '{print $1}' >"${CONTAINER_REPO_PATH}/build/opencode/cache/latest_commit.txt"
+  mkdir -p "${REPO_ROOT}/build/opencode/cache"/{apt_cache/partial,python_src,opencode_src,pgvector_src,bun,cargo}
+  git ls-remote https://github.com/anomalyco/opencode.git HEAD | awk '{print $1}' >"${REPO_ROOT}/build/opencode/cache/latest_commit.txt"
 
   resolve_version
 
   info "==> Compiling Opencode Source Assets..."
-  podman build -f "${CONTAINER_REPO_PATH}/build/opencode/Build.Containerfile" \
+  podman build -f "${REPO_ROOT}/build/opencode/Build.Containerfile" \
     --build-arg RESOLVED_VERSION="${LATEST_VERSION}" \
     --build-arg OPENCODE_TAG="v${LATEST_VERSION}" \
-    -v "${CONTAINER_REPO_PATH}/build/opencode/cache:/mnt/host_cache:z" \
+    --build-arg OPENCODE_SOURCE="${OPENCODE_SOURCE:-source}" \
+    -v "${REPO_ROOT}/build/opencode/cache:/mnt/host_cache:z" \
     -t "${COMPILER_IMG}:latest" \
     -t "${COMPILER_IMG}:${LATEST_VERSION}" \
-    "${CONTAINER_REPO_PATH}"
+    "${REPO_ROOT}"
   ;;
 
-build-server)
+server)
   resolve_version
   info "==> Assembling production Opencode Server layer..."
-  podman build -f "${CONTAINER_REPO_PATH}/build/opencode/Runtime.Containerfile" \
+  podman build -f "${REPO_ROOT}/build/opencode/Runtime.Containerfile" \
     --target runner \
     --network host \
     --build-arg COMPILER_IMAGE="${COMPILER_IMG}:${LATEST_VERSION}" \
     --build-arg HOST_UID="${HOST_UID}" \
     --build-arg HOST_GID="${HOST_GID}" \
-    -v "${CONTAINER_REPO_PATH}/build/opencode/cache:/mnt/host_cache:z" \
+    -v "${REPO_ROOT}/build/opencode/cache:/mnt/host_cache:z" \
     -t "${SERVER_IMG}:latest" \
     -t "${SERVER_IMG}:${LATEST_VERSION}" \
-    "${CONTAINER_REPO_PATH}"
+    "${REPO_ROOT}"
   ;;
 
-build-tui)
+tui)
   resolve_version
   info "==> Extracting compiled assets into slim TUI client..."
-  podman build -f "${CONTAINER_REPO_PATH}/build/opencode/Runtime.Containerfile" \
+  podman build -f "${REPO_ROOT}/build/opencode/Runtime.Containerfile" \
     --target tui \
     --build-arg COMPILER_IMAGE="${COMPILER_IMG}:${LATEST_VERSION}" \
     --build-arg HOST_UID="${HOST_UID}" \
     --build-arg HOST_GID="${HOST_GID}" \
-    -v "${CONTAINER_REPO_PATH}/build/opencode/cache:/mnt/host_cache:z" \
+    -v "${REPO_ROOT}/build/opencode/cache:/mnt/host_cache:z" \
     -t "${TUI_IMG}:latest" \
     -t "${TUI_IMG}:${LATEST_VERSION}" \
-    "${CONTAINER_REPO_PATH}"
+    "${REPO_ROOT}"
   ;;
 
-opencode-publish)
-  "$0" build-compiler
-  "$0" build-server
-  "$0" build-tui
+publish)
+  "$0" compiler
+  "$0" server
+  "$0" tui
   _hash=$(git ls-remote https://github.com/anomalyco/opencode.git HEAD | cut -c1-7)
   warn "==> Distributing Opencode [${_hash}] container imagery..."
 
@@ -109,18 +108,17 @@ opencode-publish)
   ok "✔ Opencode distribution loop completed!"
   ;;
 
-opencode-binary-publish)
+binary-publish)
   OPENCODE_SOURCE="official"
   OPENCODE_TAG="v1.18.31"
-  OPENCODE_OFFICIAL_SHA256="e9312be75ed803b7415fc2aeabda1f4fe938912a39673762dc0c38c0e11ebde4"
 
   info "==> Validating pinned Opencode official release artifact signature..."
   export OPENCODE_SOURCE OPENCODE_TAG
   resolve_version
 
-  "$0" build-compiler
-  "$0" build-server
-  "$0" build-tui
+  "$0" compiler
+  "$0" server
+  "$0" tui
 
   podman tag "${COMPILER_IMG}:latest" "${COMPILER_IMG}:${_hash}"
   podman tag "${SERVER_IMG}:latest" "${SERVER_IMG}:${_hash}"
@@ -141,7 +139,7 @@ opencode-binary-publish)
   ok "✔ Opencode distribution loop completed!"
   ;;
 
-clean-opencode)
+clean)
   warn "==> Dismantling Opencode execution runtimes and heavy compiler tracking layers..."
   podman rm -f ai-jail-opencode ai-jail-shell 2>/dev/null || true
 
@@ -151,51 +149,8 @@ clean-opencode)
   ok "✔ Opencode dismantling cycle completed safely."
   ;;
 
-build-goose-server)
-  info "==> Building centralized Goose AI Server..."
-  podman build -f "${CONTAINER_REPO_PATH}/build/goose/Containerfile" \
-    --target goose-server \
-    --build-arg HOST_UID="${HOST_UID}" \
-    --build-arg HOST_GID="${HOST_GID}" \
-    -t "${GOOSE_SERVER_IMG}:latest" "${CONTAINER_REPO_PATH}"
-  ;;
-
-build-goose-cli)
-  info "==> Building interactive terminal Goose CLI..."
-  podman build -f "${CONTAINER_REPO_PATH}/build/goose/Containerfile" \
-    --target goose-cli \
-    --build-arg HOST_UID="${HOST_UID}" \
-    --build-arg HOST_GID="${HOST_GID}" \
-    -t "${GOOSE_CLI_IMG}:latest" "${CONTAINER_REPO_PATH}"
-  ;;
-
-goose-publish)
-  "$0" build-goose-server
-  "$0" build-goose-cli
-  _hash=$(git ls-remote https://github.com/aaif-goose/goose.git HEAD | cut -c1-7)
-  warn "==> Distributing Goose [${_hash}] container imagery..."
-
-  podman tag "${GOOSE_SERVER_IMG}:latest" "${GOOSE_SERVER_IMG}:${_hash}"
-  podman tag "${GOOSE_CLI_IMG}:latest" "${GOOSE_CLI_IMG}:${_hash}"
-
-  podman push "${GOOSE_SERVER_IMG}:latest"
-  podman push "${GOOSE_SERVER_IMG}:${_hash}"
-  podman push "${GOOSE_CLI_IMG}:latest"
-  podman push "${GOOSE_CLI_IMG}:${_hash}"
-  ok "✔ Goose distribution loop completed!"
-  ;;
-
-clean-goose)
-  warn "==> Dismantling Goose execution runtimes and localized containers..."
-  podman rm -f ai-jail-goose ai-jail-goose-shell 2>/dev/null || true
-
-  podman rmi $(podman images -q "${GOOSE_SERVER_IMG}") 2>/dev/null || true
-  podman rmi $(podman images -q "${GOOSE_CLI_IMG}") 2>/dev/null || true
-  ok "✔ Goose dismantling cycle completed safely."
-  ;;
-
 *)
-  error "Error: Unknown fortress action target."
+  error "Error: Unknown opencode action target."
   exit 1
   ;;
 esac

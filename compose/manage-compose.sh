@@ -2,8 +2,9 @@
 set -e
 
 # Pull colors from the central repository library folder
-# shellcheck source=lib/colors.sh
-. "${CONTAINER_REPO_PATH}/lib/colors.sh"
+# shellcheck source=lib/cli.sh
+REPO_ROOT=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
+. "${REPO_ROOT}/lib/cli.sh"
 
 CMD="${CMD:-docker}"
 ENV_FILE="compose/.env"
@@ -33,13 +34,13 @@ run_compose() {
   _extra_env=""
 
   case "$_service" in
-  syncthing) _extra_files="-f ${CONTAINER_REPO_PATH}/compose/syncthing/volumes.yml" ;;
-  powerwall) _extra_env="--env-file ${CONTAINER_REPO_PATH}/compose/powerwall/data/compose.env" ;;
+  syncthing) _extra_files="-f ${REPO_ROOT}/compose/syncthing/volumes.yml" ;;
+  powerwall) _extra_env="--env-file ${REPO_ROOT}/compose/powerwall/data/compose.env" ;;
   esac
 
   info "==> Deploying infrastructure layer: ${_service}..."
-  set -- run_privileged "${CMD}" compose --env-file "${CONTAINER_REPO_PATH}/${ENV_FILE}" \
-    $_extra_env -f "${CONTAINER_REPO_PATH}/compose/${_service}/compose.yml" $_extra_files "${_action}"
+  set -- run_privileged "${CMD}" compose --env-file "${REPO_ROOT}/${ENV_FILE}" \
+    $_extra_env -f "${REPO_ROOT}/compose/${_service}/compose.yml" $_extra_files "${_action}"
   [ -n "$_extra_action_flags" ] && set -- "$@" "$_extra_action_flags"
   "$@" -d
 }
@@ -135,6 +136,13 @@ rmi-all)
   else
     ok "No images to clear."
   fi
+  ;;
+
+list)
+  info "==> Auditing Docker VM Container Cluster..."
+  run_privileged "${CMD}" ps -all
+  run_privileged "${CMD}" images
+  run_privileged "${CMD}" network ls
   ;;
 
 prune-net)

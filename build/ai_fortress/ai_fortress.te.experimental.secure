@@ -1,0 +1,113 @@
+policy_module(ai_fortress, 1.0)
+
+gen_require(`
+    type container_runtime_t;
+    type container_file_t;
+    type sysfs_t;
+    class process2 nnp_transition;
+')
+
+########################################
+# Declarations & System Mapping
+########################################
+type fortress_agent_t;
+domain_type(fortress_agent_t)
+
+type fortress_src_t;
+files_type(fortress_src_t)
+
+type fortress_cache_t;
+files_type(fortress_cache_t)
+
+type fortress_config_t;
+files_type(fortress_config_t)
+
+type fortress_port_t;
+corenet_port(fortress_port_t)
+
+# RESTORED: Mandatory for runtime file creation labeling
+type_transition fortress_agent_t fortress_src_t:dir fortress_src_t;
+type_transition fortress_agent_t fortress_cache_t:dir fortress_cache_t;
+type_transition fortress_agent_t fortress_config_t:dir fortress_config_t;
+
+# Managed transition from Podman/crun
+allow container_runtime_t fortress_agent_t:process { transition dyntransition siginh rlimitinh noatsecure getcap getattr getsched share };
+virt_sandbox_domain(fortress_agent_t)
+allow container_runtime_t fortress_agent_t:process2 { nnp_transition };
+
+########################################
+# Process & Network Isolation (Hardened)
+########################################
+# REMOVED: execmem (Mythos breakout vector)
+allow fortress_agent_t self:process { fork signal_perms setsched };
+allow fortress_agent_t self:shm { create destroy read write };
+
+# Restrict socket operations strictly to self and designated ports
+allow fortress_agent_t self: { tcp_socket udp_socket } { create_stream_socket_perms connect getattr setattr read write };
+allow fortress_agent_t self:tcp_socket { listen accept };
+
+# Bind/Connect restricted purely to CIL-defined ports (4096, 5005)
+allow fortress_agent_t fortress_port_t:tcp_socket { name_bind name_connect };
+
+# Controlled outbound access (Keep ONLY if OpenCode reaches an external LLM API)
+sysnet_dns_name_resolve(fortress_agent_t)
+corenet_tcp_connect_http_port(fortress_agent_t)
+
+########################################
+# Storage & Execution Mapping
+########################################
+# Image Reads (Allows Python to load, but strips broad execution loops)
+allow fortress_agent_t container_file_t:dir { list_dir_perms read open getattr search };
+allow fortress_agent_t container_file_t:file { read_file_perms map open getattr };
+allow fortress_agent_t container_file_t:lnk_file { read getattr };
+
+# Use core standard system commands instead of sweeping container_file_t execution
+corecmd_exec_bin(fortress_agent_t)
+corecmd_exec_shell(fortress_agent_t)
+
+# Source path protection - No raw binary execution allowed here
+allow fortress_agent_t fortress_src_t:dir { manage_dir_perms relabelfrom relabelto };
+allow fortress_agent_t fortress_src_t:file { manage_file_perms relabelfrom relabelto map ioctl };
+allow fortress_agent_t fortress_src_t:lnk_file { manage_lnk_file_perms relabelfrom relabelto }; # RESTORED
+
+# Cache path isolation - Execution allowed strictly for FastEmbed/ONNX binaries
+allow fortress_agent_t fortress_cache_t:dir { manage_dir_perms relabelfrom relabelto };
+allow fortress_agent_t fortress_cache_t:file { manage_file_perms relabelfrom relabelto map ioctl execute };
+allow fortress_agent_t fortress_cache_t:lnk_file { manage_lnk_file_perms }; # RESTORED
+
+# Configs - Pure storage
+allow fortress_agent_t fortress_config_t:dir manage_dir_perms;
+allow fortress_agent_t fortress_config_t:file { manage_file_perms map ioctl };
+
+# Safe ioctls via Secureblue specifications
+allowxperm fortress_agent_t {
+    fortress_src_t
+    fortress_cache_t
+    fortress_config_t
+}:file ioctl { 0x5401 0x5450 0x5451 0x5413 };
+
+# Clean User Namespaces (REMOVED: dac_override, dac_read_search)
+allow fortress_agent_t self:cap_userns { fowner chown fsetid };
+
+# RESTORED: Transient symlinks for virtual environments
+allow fortress_agent_t self:lnk_file manage_lnk_file_perms;
+
+########################################
+# Infrastructure & Memory Drops
+########################################
+userdom_use_user_terminals(fortress_agent_t)
+
+kernel_read_proc_symlinks(fortress_agent_t)
+kernel_read_system_state(fortress_agent_t)
+fs_read_cgroup_files(fortress_agent_t)
+
+# Memory execution prevention in temporary space
+fs_manage_tmpfs_dirs(fortress_agent_t)
+fs_manage_tmpfs_files(fortress_agent_t)
+# REMOVED: allow fortress_agent_t tmpfs_t:file execute;
+
+allow fortress_agent_t self:fifo_file manage_fifo_file_perms;
+allow fortress_agent_t self:unix_stream_socket create_stream_socket_perms;
+
+allow fortress_agent_t container_runtime_t:fd use;
+allow fortress_agent_t container_runtime_t:fifo_file { read write append getattr ioctl };

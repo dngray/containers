@@ -1,8 +1,9 @@
 #!/bin/sh
 set -e
 
-# shellcheck source=lib/colors.sh
-. "${CONTAINER_REPO_PATH}/lib/colors.sh"
+# shellcheck source=lib/cli.sh
+REPO_ROOT=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
+. "${REPO_ROOT}/lib/cli.sh"
 
 if [ "$#" -lt 2 ]; then
   error "Usage: $0 <spec-path> <build-dir> [source-paths...]"

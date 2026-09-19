@@ -1,0 +1,110 @@
+policy_module(ai_fortress, 1.1)
+
+gen_require(`
+    type container_runtime_t;
+    type container_file_t;
+    type sysfs_t;
+    type tmpfs_t;
+    class process2 nnp_transition;
+')
+
+########################################
+# Declarations & System Mapping
+########################################
+type fortress_agent_t;
+domain_type(fortress_agent_t)
+
+type fortress_src_t;
+files_type(fortress_src_t)
+
+type fortress_cache_t;
+files_type(fortress_cache_t)
+
+type fortress_config_t;
+files_type(fortress_config_t)
+
+type fortress_port_t;
+corenet_port(fortress_port_t)
+
+type_transition fortress_agent_t fortress_src_t:dir fortress_src_t;
+type_transition fortress_agent_t fortress_cache_t:dir fortress_cache_t;
+type_transition fortress_agent_t fortress_config_t:dir fortress_config_t;
+
+allow container_runtime_t fortress_agent_t:process { transition dyntransition siginh rlimitinh noatsecure getcap getattr getsched share };
+virt_sandbox_domain(fortress_agent_t)
+allow container_runtime_t fortress_agent_t:process2 { nnp_transition };
+
+########################################
+# Process & Hardened Memory Runtime
+########################################
+# REQUIRED for Python JIT & Bun's execution layers
+allow fortress_agent_t self:process { execmem fork signal_perms setsched };
+allow fortress_agent_t self:shm { create destroy read write map };
+
+########################################
+# Database & Network Operations
+########################################
+allow fortress_agent_t self: { tcp_socket udp_socket } { create_stream_socket_perms connect getattr setattr read write };
+allow fortress_agent_t self:tcp_socket { listen accept };
+allow fortress_agent_t fortress_port_t:tcp_socket { name_bind name_connect };
+
+sysnet_dns_name_resolve(fortress_agent_t)
+corenet_tcp_connect_http_port(fortress_agent_t)
+
+# REQUIRED for PostgreSQL multi-container network routing
+corenet_tcp_bind_all_nodes(fortress_agent_t)
+corenet_tcp_connect_postgresql_port(fortress_agent_t)
+
+########################################
+# Internal Container File System Execution
+########################################
+allow fortress_agent_t container_file_t:dir { list_dir_perms read open getattr search };
+allow fortress_agent_t container_file_t:file { read_file_perms execute map open getattr };
+allow fortress_agent_t container_file_t:lnk_file { read getattr };
+
+corecmd_exec_bin(fortress_agent_t)
+corecmd_exec_shell(fortress_agent_t)
+
+########################################
+# Data Access & Script Execution
+########################################
+# REQUIRED: Allows the agent to run scripts it writes in the workspace
+allow fortress_agent_t fortress_src_t:dir { manage_dir_perms relabelfrom relabelto };
+allow fortress_agent_t fortress_src_t:file { manage_file_perms relabelfrom relabelto map ioctl execute };
+allow fortress_agent_t fortress_src_t:lnk_file { manage_lnk_file_perms relabelfrom relabelto };
+
+# REQUIRED: Allows package manager execution of modules
+allow fortress_agent_t fortress_cache_t:dir { manage_dir_perms relabelfrom relabelto };
+allow fortress_agent_t fortress_cache_t:file { manage_file_perms relabelfrom relabelto map ioctl execute };
+allow fortress_agent_t fortress_cache_t:lnk_file { manage_lnk_file_perms };
+
+allow fortress_agent_t fortress_config_t:dir manage_dir_perms;
+allow fortress_agent_t fortress_config_t:file { manage_file_perms map ioctl };
+
+allowxperm fortress_agent_t {
+    fortress_src_t
+    fortress_cache_t
+    fortress_config_t
+}:file ioctl { 0x5401 0x5450 0x5451 0x5413 };
+
+# REQUIRED for clean container loop mappings, but keeps broad DAC permissions closed
+allow fortress_agent_t self:cap_userns { fowner chown fsetid };
+allow fortress_agent_t self:lnk_file manage_lnk_file_perms;
+
+########################################
+# Shared Memory / Compiling Spaces
+########################################
+userdom_use_user_terminals(fortress_agent_t)
+dev_read_sysfs(fortress_agent_t)
+kernel_read_system_state(fortress_agent_t)
+fs_read_cgroup_files(fortress_agent_t)
+
+# REQUIRED for dynamic wheel installations in memory space
+fs_manage_tmpfs_dirs(fortress_agent_t)
+fs_manage_tmpfs_files(fortress_agent_t)
+allow fortress_agent_t tmpfs_t:file { execute execute_no_trans map };
+
+allow fortress_agent_t self:fifo_file manage_fifo_file_perms;
+allow fortress_agent_t self:unix_stream_socket create_stream_socket_perms;
+allow fortress_agent_t container_runtime_t:fd use;
+allow fortress_agent_t container_runtime_t:fifo_file { read write append getattr ioctl };

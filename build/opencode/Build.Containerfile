@@ -71,7 +71,11 @@ RUN --mount=type=bind,source=build/opencode/cache,target=/mnt/host_cache,rw,Z,U 
 # Compile OpenCode from official use binary
 ARG RESOLVED_VERSION=1.17.0
 ARG OPENCODE_TAG=v1.17.0
+ARG OPENCODE_SOURCE=source
 WORKDIR /src/opencode
+
+ENV BUN_CONFIG_MAX_WORKERS=1
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 RUN set -e; \
     if [ "${OPENCODE_SOURCE}" = "official" ]; then \
@@ -86,37 +90,33 @@ RUN set -e; \
         tar -xzf /tmp/opencode-linux-x64.tar.gz -C /out && \
         chmod +x /out/opencode && \
         rm -f /tmp/opencode-linux-x64.tar.gz; \
+    elif [ "${OPENCODE_SOURCE}" = "source" ]; then \
+        echo "🧱 Compiling OpenCode from source (${OPENCODE_TAG})..." && \
+        cd ${CACHE_DIR}/opencode_src && \
+        if [ ! -d "repo/.git" ]; then \
+            echo "📥 Repository missing. Cloning stable release tag ${OPENCODE_TAG}..." && \
+            git clone --branch "${OPENCODE_TAG}" --depth 1 https://github.com/anomalyco/opencode.git repo; \
+        else \
+            echo "🔄 Repository found. Syncing and switching to stable tag ${OPENCODE_TAG}..." && \
+            cd repo && \
+            git fetch --tags --depth 1 origin "${OPENCODE_TAG}" && \
+            git checkout FETCH_HEAD; \
+        fi && \
+        cp -r ${CACHE_DIR}/opencode_src/repo/. /src/opencode/ && \
+        export HOME=${CACHE_DIR}/bun && \
+        bun install --backend=copyfile --ignore-scripts --network-concurrency=1 && \
+        REAL_VER="${RESOLVED_VERSION:-1.18.31}" && \
+        HUSKY=0 bun run --cwd packages/core fix-node-pty && \
+        export OPENCODE_VERSION="${REAL_VER}" && \
+        export OPENCODE_CHANNEL="prod" && \
+        export HUSKY=0 && \
+        bun x turbo run build --filter=opencode --concurrency 1 --env-mode=loose -- --single && \
+        mkdir -p /out && \
+        cp packages/opencode/dist/opencode-linux-x64/bin/opencode /out/opencode; \
     else \
-        echo "🧱 Compiling OpenCode from source (${OPENCODE_TAG})..."; \
+        echo "Unknown OPENCODE_SOURCE: '${OPENCODE_SOURCE}' (expected official or source)" >&2; \
+        exit 1; \
     fi
-
-ENV BUN_CONFIG_MAX_WORKERS=1
-ENV NODE_OPTIONS="--max-old-space-size=4096"
-
-RUN cd ${CACHE_DIR}/opencode_src && \
-    if [ ! -d "repo/.git" ]; then \
-        echo "📥 Repository missing. Cloning stable release tag ${OPENCODE_TAG}..." && \
-        git clone --branch "${OPENCODE_TAG}" --depth 1 https://github.com/anomalyco/opencode.git repo; \
-    else \
-        echo "🔄 Repository found. Syncing and switching to stable tag ${OPENCODE_TAG}..." && \
-        cd repo && \
-        git fetch --tags --depth 1 origin "${OPENCODE_TAG}" && \
-        git checkout FETCH_HEAD; \
-    fi && \
-    cp -r ${CACHE_DIR}/opencode_src/repo/. /src/opencode/
-
-RUN export HOME=${CACHE_DIR}/bun && \
-    bun install --backend=copyfile --ignore-scripts --network-concurrency=1
-
-RUN export HOME=${CACHE_DIR}/bun && \
-    REAL_VER="${RESOLVED_VERSION:-1.18.31}" && \
-    HUSKY=0 bun run --cwd packages/core fix-node-pty && \
-    export OPENCODE_VERSION="${REAL_VER}" && \
-    export OPENCODE_CHANNEL="prod" && \
-    export HUSKY=0 && \
-    bun x turbo run build --filter=opencode --concurrency 1 --env-mode=loose -- --single && \
-    mkdir -p /out && \
-    cp packages/opencode/dist/opencode-linux-x64/bin/opencode /out/opencode
 
 # Compile pgvector
 WORKDIR /src/pgvector

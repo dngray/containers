@@ -1,8 +1,9 @@
 #!/bin/sh
 set -e
 
-# Pull colors from the central repository library folder
-. "${CONTAINER_REPO_PATH}/lib/colors.sh"
+# shellcheck source=lib/cli.sh
+REPO_ROOT=$(CDPATH= cd "$(dirname "$0")/../.." && pwd)
+. "${REPO_ROOT}/lib/cli.sh"
 
 IMAGE_TAG="imapfilter:latest"
 
@@ -13,9 +14,9 @@ build)
 
   info "==> Building Imapfilter container [${_date}]..."
   # Explicitly scopes file lookups directly to your unified repository tree path
-  podman build -f "${CONTAINER_REPO_PATH}/build/imapfilter/Containerfile" \
+  podman build -f "${REPO_ROOT}/build/imapfilter/Containerfile" \
     --build-arg BUILD_DATE="${_date}" \
-    -t "${IMAGE_TAG}" "${CONTAINER_REPO_PATH}"
+    -t "${IMAGE_TAG}" "${REPO_ROOT}"
   ;;
 
 run)
