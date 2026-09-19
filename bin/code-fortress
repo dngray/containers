@@ -1,5 +1,29 @@
 #!/bin/bash
-# ~/bin/code-fortress
+# ~/.local/bin/code-fortress
+
+# 0. Repository Self-Location
+# code-fortress is deployed as a single symlink (~/.local/bin/code-fortress -> .../bin/code-fortress).
+# Resolve it, then walk up looking for the justfile marker to find the repo root.
+SELF=$(command -v code-fortress 2>/dev/null) || SELF=$0
+SELF=$(realpath "$SELF" 2>/dev/null) || true
+d=$(dirname "$SELF")
+REPO_ROOT=
+while [ "$d" != "/" ]; do
+  if [ -f "$d/justfile" ]; then
+    REPO_ROOT=$d
+    break
+  fi
+  d=$(dirname "$d")
+done
+
+if [ -n "$REPO_ROOT" ]; then
+  # Make repo tools (e.g. ai-secure) resolvable inside the fortress panes
+  export PATH="$REPO_ROOT/bin:$PATH"
+else
+  echo "error: cannot locate the containers repo from '$SELF'." >&2
+  echo "install bin/code-fortress as a symlink into the repo (e.g. ~/.local/bin/code-fortress -> ~/containers/bin/code-fortress)." >&2
+  exit 1
+fi
 
 # 1. Identity & Context Resolution
 RAW_PATH=${1:-"$HOME/src"}
@@ -58,4 +82,4 @@ export GOGOOSE_MODE="${GOOSE_MODE:-nanogpt}"
 
 # 5. Execution Environment Launch
 echo "🏰 Fortifying workspace in $MODE mode at: $FORTRESS_PATH"
-zellij --layout "$CONTAINER_REPO_PATH/layouts/${MODE}-fortress.kdl"
+zellij --layout "$REPO_ROOT/layouts/${MODE}-fortress.kdl"

@@ -1,8 +1,9 @@
 #!/bin/sh
 set -e
 
-# Pull colors from the central repository library folder
-. "${CONTAINER_REPO_PATH}/lib/colors.sh"
+# shellcheck source=lib/cli.sh
+REPO_ROOT=$(CDPATH= cd "$(dirname "$0")/../.." && pwd)
+. "${REPO_ROOT}/lib/cli.sh"
 
 case "$1" in
 pull)
@@ -14,7 +15,7 @@ run)
   info "==> Initializing interactive Crowdin workspace session..."
   podman run -it --replace --userns=keep-id \
     -v "${HOME}/src:/src:z" \
-    --env-file "${CONTAINER_REPO_PATH}/run/crowdin/.env" \
+    --env-file "${REPO_ROOT}/apps/crowdin/.env" \
     --name crowdin \
     docker.io/crowdin/cli:latest
   ;;
