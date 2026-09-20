@@ -601,8 +601,9 @@ merge_payload() {
 #   the variant. full picks pydex (python PATH prefix), pgassets, rusttools;
 #   basic starts from base. Both merge ocbin, uvbin and the mcp payload,
 #   bake the opencode.json (lean_ctx only for full), normalise /home/opencode
-#   ownership to group == user, and set user/workdir/entrypoint before
-#   committing. tail controls the local tag: empty -> latest + <version>,
+#   ownership (chown HOST_UID:0, then chmod g=u), and set user/workdir/
+#   entrypoint before committing. tail controls the local tag: empty ->
+#   latest + <version>,
 #   otherwise a distinct <tail> + <tail>-<version>.
 # Args:
 #   $1  stack (string): "full" or "basic"
@@ -653,11 +654,21 @@ compose_server() {
     jq 'del(.mcp.lean_ctx)' "${config_source}" >"${STAGE}/opencode-basic.json"
     buildah copy "$container" "${STAGE}/opencode-basic.json" /home/opencode/.config/opencode/opencode.json
   fi
-  buildah run "$container" -- bash -ec '
+  buildah run "$container" -- bash -ec "
     mkdir -p /home/opencode/.local/share/opencode /home/opencode/.local/state/opencode \
       /home/opencode/.cache/opencode
+    chown -R ${HOST_UID}:0 /home/opencode
     chmod -R g=u /home/opencode
-  '
+    # uid-agnostic runtime state: the fortress may run the container with
+    # --userns keep-id + --user <invoking-host-uid>, which differs from the
+    # bake-time HOST_UID on other hosts (e.g. 60139 on a systemd-homed box).
+    # Traverse/exec for every identity across home, plus world-write on the
+    # mutable XDG/workspace dirs so any identity can create state; binary
+    # execute bits under .local are preserved (X only adds x to dirs).
+    chmod -R o+X /home/opencode
+    chmod -R o+rwX /home/opencode/.local/share/opencode /home/opencode/.local/state/opencode \
+      /home/opencode/.cache/opencode /home/opencode/.config/opencode /home/opencode/workspace
+  "
   buildah config --user opencode "$container"
   buildah config --workingdir /home/opencode/workspace "$container"
   buildah config --entrypoint '["opencode"]' "$container"
@@ -697,6 +708,9 @@ compose_tui() {
   buildah config --env PATH=/usr/local/bin:/usr/bin:/bin "$container"
   buildah run --user opencode "$container" -- bash -ec '
     mkdir -p /home/opencode/workspace /home/opencode/.cache/opencode \
+      /home/opencode/.local/share/opencode /home/opencode/.local/state/opencode
+    chmod -R o+X /home/opencode
+    chmod -R o+rwX /home/opencode/workspace /home/opencode/.cache/opencode \
       /home/opencode/.local/share/opencode /home/opencode/.local/state/opencode
   '
   buildah config --user opencode "$container"
