@@ -71,12 +71,12 @@ case "$APP_TYPE" in
   REGISTRY="${REG_URL:-localhost}/library/opencode"
 
   if [ "$TOOL" == "shell" ]; then
-    IMAGE="${REGISTRY}/opencode-tui:latest"
+    IMAGE="${REGISTRY}/opencode-tui:${OPENCODE_VARIANT:-latest}"
     EXTRA_FLAGS+=(-e "OPENCODE_SERVER_PASSWORD=$OPENCODE_SERVER_PASSWORD")
     EXTRA_FLAGS+=("-i" "--tty")
     CMD_ARGS=(attach "http://127.0.0.1:4096" --password "$OPENCODE_SERVER_PASSWORD" --dir ".")
   else
-    IMAGE="${REGISTRY}/opencode-server:latest"
+    IMAGE="${REGISTRY}/opencode-server:${OPENCODE_VARIANT:-latest}"
     EXTRA_FLAGS+=("-i")
     EXTRA_FLAGS+=(-e "OPENCODE_SERVER_PASSWORD=$OPENCODE_SERVER_PASSWORD")
     CMD_ARGS=(serve --port 4096 --hostname 0.0.0.0)

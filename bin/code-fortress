@@ -32,15 +32,31 @@ export FORTRESS_PATH
 PROJECT_ID=$(basename "$FORTRESS_PATH")
 export POD_NAME="ai-fortress-pod-$PROJECT_ID"
 MODE=${2:-"opencode"}
+# OpenCode-only image variant (tag suffix): latest | full-binary | basic-binary
+VARIANT=${3:-"latest"}
 
 # Validate operation mode immediately to fail fast
 case "$MODE" in
 "aider" | "opencode" | "goose") ;;
 *)
-  echo "❌ Usage: code-fortress <path> [aider|opencode|goose]"
+  echo "❌ Usage: code-fortress <path> [aider|opencode|goose] [latest|full-binary|basic-binary]"
   exit 1
   ;;
 esac
+
+# Validate the image variant tag; only opencode honours it today
+case "$VARIANT" in
+"latest" | "full-binary" | "basic-binary") ;;
+*)
+  echo "❌ Usage: code-fortress <path> [aider|opencode|goose] [latest|full-binary|basic-binary]"
+  exit 1
+  ;;
+esac
+
+if [ "$MODE" != "opencode" ] && [ "$VARIANT" != "latest" ]; then
+  echo "⚠️  Image variant '$VARIANT' only applies to opencode mode; ignoring."
+  VARIANT="latest"
+fi
 
 # 2. Strict Context-Aware Cleanup
 cleanup_fortress() {
@@ -77,6 +93,7 @@ OPENROUTER_API_KEY=$(gopass show ai/openrouter-api-key) || exit 1
 OPENAI_API_KEY=$(gopass show ai/openai-api-key) || exit 1
 ANTHROPIC_API_KEY=$(gopass show ai/anthropic-api-key) || exit 1
 export OPENCODE_SERVER_PASSWORD OPENROUTER_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY
+export OPENCODE_VARIANT="$VARIANT"
 
 export GOGOOSE_MODE="${GOOSE_MODE:-nanogpt}"
 
