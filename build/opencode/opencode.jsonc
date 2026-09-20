@@ -1,0 +1,18 @@
+{
+  "mcp": {
+    "semble": { "type": "local", "command": ["semble"] },
+    "codebase_memory": { "type": "local", "command": ["code-index-mcp"] },
+    "repomix": { "type": "local", "command": ["repomix", "--mcp"] },
+    "lean_ctx": { "type": "local", "command": ["lean-ctx", "mcp"] }
+  },
+  "lsp": {
+    "python": {
+      "command": ["pylsp"],
+      "extensions": [".py"]
+    },
+    "bash": {
+      "command": ["bash-language-server", "start"],
+      "extensions": [".sh", ".bash", ".bashrc", ".profile"]
+    }
+  }
+}
