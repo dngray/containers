@@ -1,0 +1,73 @@
+#!/bin/bash
+# containers/bin/fortress-probe
+# Poll an HTTP URL until the service is actually serving, up to a bounded
+# budget. Exits 0 once the listener answers, or 1 after a timeout (with a
+# warning) so the caller can still proceed and surface its own connect error.
+#
+# TLS-free local probes only, so failure to start serving is detected by a
+# transport-level curl error (connection refused/reset), not by a 4xx/5xx.
+# By default only 2xx counts as ready; --any-status treats any HTTP answer
+# as proof the listener is alive (handy for servers whose root path 404s).
+
+MAX=60
+ANY_STATUS=0
+URL=
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --any-status)
+      ANY_STATUS=1
+      shift
+      ;;
+    --max)
+      MAX=${2:?--max requires a value}
+      shift 2
+      ;;
+    --max=*)
+      MAX=${1#*=}
+      shift
+      ;;
+    -h | --help)
+      echo "usage: fortress-probe [--any-status] [--max SECONDS] <url>"
+      exit 0
+      ;;
+    -*)
+      echo "fortress-probe: unknown option: $1" >&2
+      exit 2
+      ;;
+    *)
+      [ -z "$URL" ] || { echo "fortress-probe: unexpected argument: $1" >&2; exit 2; }
+      URL=$1
+      shift
+      ;;
+  esac
+done
+
+if [ -z "$URL" ]; then
+  echo "fortress-probe: missing <url>" >&2
+  exit 2
+fi
+
+USERNAME=${OPENCODE_SERVER_USERNAME:-opencode}
+CURL_AUTH=()
+if [ -n "${OPENCODE_SERVER_PASSWORD:-}" ]; then
+  CURL_AUTH=(-u "${USERNAME}:${OPENCODE_SERVER_PASSWORD}")
+fi
+
+CURL_FLAGS=(-o /dev/null --max-time 2)
+if [ "$ANY_STATUS" -eq 1 ]; then
+  CURL_FLAGS=(-sS "${CURL_FLAGS[@]}")
+else
+  CURL_FLAGS=(-fsS "${CURL_FLAGS[@]}")
+fi
+
+deadline=$(( $(date +%s) + MAX ))
+while [ "$(date +%s)" -lt "$deadline" ]; do
+  if curl "${CURL_FLAGS[@]}" "${CURL_AUTH[@]}" "$URL" 2>/dev/null; then
+    exit 0
+  fi
+  sleep 0.5
+done
+
+echo "fortress-probe: $URL not serving after ${MAX}s; proceeding anyway" >&2
+exit 1
