@@ -20,6 +20,7 @@
 #   ocbin-binary  <hash>            pinned upstream, sha256-verified release
 #   pgassets      <PGVER>           pgclient + pgvector (payload staging dir)
 #   rusttools     latest            lean-ctx built from crates.io
+#   yq            latest            yq from github.com/mikefarah/yq/v4 via go install
 #   uvbin         latest            uv / uvx binaries on a scratch rootfs
 #   mcp           latest            MCP/LSP tools payload in /home/opencode/.local
 #
@@ -28,7 +29,7 @@
 #   full + binary   pydex + pgassets + rusttools + ocbin-binary
 #   basic + source  base                + ocbin-source (Debian python, slim)
 #   basic + binary  base                + ocbin-binary
-# Every variant also merges uvbin and mcp. The tui image is tui-base + ocbin.
+# Every variant also merges uvbin, yq and mcp. The tui image is tui-base + ocbin.
 #
 # opencode.json is copied verbatim from build/opencode/opencode.jsonc
 # (the full-stack config); the basic stack drops the lean_ctx entry via jq.
@@ -100,6 +101,7 @@ TUI_BASE_IMG="${NS}/tui-base:v1"
 PYDEX_IMG="${NS}/pydex:${PYVER}"
 PGA_IMG="${NS}/pgassets:${PGVER}"
 RUST_IMG="${NS}/rusttools:latest"
+YQ_IMG="${NS}/yq:latest"
 UVBIN_IMG="${NS}/uvbin:latest"
 MCP_IMG="${NS}/mcp:latest"
 OC_SRC_IMG="${NS}/ocbin-source:${RESOLVED_HASH}"
@@ -503,6 +505,35 @@ build_rusttools() {
 }
 
 # ---------------------------------------------------------------------------
+# build_yq()
+#
+# Description: installs the yq v4 binary from module proxy HEAD into
+#   /usr/local/bin via the official golang image. The go module + build
+#   caches live on the host bind-mount so repeat runs are incremental.
+# Globals:
+#   CACHE (string): host cache dir; go module/build caches at /mnt/host_cache/go
+#   YQ_IMG (string): image name committed when complete
+# Outputs:
+#   Commits ${YQ_IMG} with /usr/local/bin/yq
+# ---------------------------------------------------------------------------
+build_yq() {
+  local container
+  container=$(buildah from docker.io/library/golang:latest)
+  buildah config --env HOME=/root "$container"
+  buildah config --env GOPATH=/mnt/host_cache/go "$container"
+  buildah config --env GOMODCACHE=/mnt/host_cache/go/pkg/mod "$container"
+  buildah config --env GOCACHE=/mnt/host_cache/go/cache "$container"
+  buildah run --volume "${CACHE}:/mnt/host_cache" "$container" -- bash -ec "
+    set -e
+    export GOBIN=/usr/local/bin
+    go install github.com/mikefarah/yq/v4@latest
+    yq --version
+  "
+  buildah commit --rm "$container" "${YQ_IMG}"
+}
+
+
+# ---------------------------------------------------------------------------
 # build_uvbin()
 #
 # Description: strips uv and uvx out of the official astral-sh image and
@@ -599,7 +630,7 @@ merge_payload() {
 #
 # Description: assembles the opencode-server image by picking layers per
 #   the variant. full picks pydex (python PATH prefix), pgassets, rusttools;
-#   basic starts from base. Both merge ocbin, uvbin and the mcp payload,
+#   basic starts from base. Both merge ocbin, uvbin, yq and the mcp payload,
 #   bake the opencode.json (lean_ctx only for full), normalise /home/opencode
 #   ownership (chown HOST_UID:0, then chmod g=u), and set user/workdir/
 #   entrypoint before committing. tail controls the local tag: empty ->
@@ -633,6 +664,7 @@ compose_server() {
   merge_payload "$container" "$ocbin_image" /usr/local/bin/opencode /usr/local/bin/opencode
   merge_payload "$container" "${UVBIN_IMG}" /uv /bin/uv
   merge_payload "$container" "${UVBIN_IMG}" /uvx /bin/uvx
+  merge_payload "$container" "${YQ_IMG}" /usr/local/bin/yq /usr/local/bin/yq
   merge_payload "$container" "${MCP_IMG}" /home/opencode/.local /home/opencode/
   if [ "${stack}" = full ]; then
     merge_payload "$container" "${PGA_IMG}" /pg-layer/usr/lib/postgresql /usr/lib/postgresql
@@ -747,6 +779,7 @@ ensure_all_layers() {
   ensure base "${BASE_IMG}"
   ensure tui_base "${TUI_BASE_IMG}"
   ensure uvbin "${UVBIN_IMG}"
+  ensure yq "${YQ_IMG}"
   ensure mcp "${MCP_IMG}"
   if [ "${stack}" = full ]; then
     ensure pydex "${PYDEX_IMG}"
