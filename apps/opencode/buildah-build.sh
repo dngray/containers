@@ -338,7 +338,7 @@ build_pydex() {
 build_ocbin_source() {
   local container release_tag
   release_tag="${OPENCODE_TAG}"
-  container=$(buildah from docker.io/oven/bun:debian)
+  container=$(buildah from docker.io/oven/bun:1.3.14-debian)
   buildah config --env HOME=/mnt/host_cache/bun "$container"
   buildah config --env NODE_OPTIONS=--max-old-space-size=4096 "$container"
   buildah run --volume "${CACHE}:/mnt/host_cache" "$container" -- bash -ec "
@@ -656,7 +656,7 @@ compose_server() {
   fi
   buildah run "$container" -- bash -ec "
     mkdir -p /home/opencode/.local/share/opencode /home/opencode/.local/state/opencode \
-      /home/opencode/.cache/opencode
+      /home/opencode/.cache/opencode /home/opencode/.npm
     chown -R ${HOST_UID}:0 /home/opencode
     chmod -R g=u /home/opencode
     # uid-agnostic runtime state: the fortress may run the container with
@@ -667,7 +667,8 @@ compose_server() {
     # execute bits under .local are preserved (X only adds x to dirs).
     chmod -R o+X /home/opencode
     chmod -R o+rwX /home/opencode/.local/share/opencode /home/opencode/.local/state/opencode \
-      /home/opencode/.cache/opencode /home/opencode/.config/opencode /home/opencode/workspace
+      /home/opencode/.cache/opencode /home/opencode/.config/opencode /home/opencode/workspace \
+      /home/opencode/.npm
   "
   buildah config --user opencode "$container"
   buildah config --workingdir /home/opencode/workspace "$container"
@@ -708,10 +709,12 @@ compose_tui() {
   buildah config --env PATH=/usr/local/bin:/usr/bin:/bin "$container"
   buildah run --user opencode "$container" -- bash -ec '
     mkdir -p /home/opencode/workspace /home/opencode/.cache/opencode \
-      /home/opencode/.local/share/opencode /home/opencode/.local/state/opencode
+      /home/opencode/.local/share/opencode /home/opencode/.local/state/opencode \
+      /home/opencode/.npm
     chmod -R o+X /home/opencode
     chmod -R o+rwX /home/opencode/workspace /home/opencode/.cache/opencode \
-      /home/opencode/.local/share/opencode /home/opencode/.local/state/opencode
+      /home/opencode/.local/share/opencode /home/opencode/.local/state/opencode \
+      /home/opencode/.npm
   '
   buildah config --user opencode "$container"
   buildah config --workingdir /home/opencode/workspace "$container"

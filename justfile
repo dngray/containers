@@ -214,8 +214,8 @@ tftp-clean:
 
 # Build cold cache layer catalog for Opencode via buildah
 [group('agents')]
-opencode-compiler:
-    ./apps/opencode/opencode.sh compiler
+opencode-layers:
+    ./apps/opencode/opencode.sh layers
 
 # Assemble backend server image from composed buildah layers
 [group('agents')]

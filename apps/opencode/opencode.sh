@@ -234,14 +234,14 @@ distribute_images() {
 
 # ---------------------------------------------------------------------------
 # Dispatch
-#   compiler  - layer images for the default variant (cache warm-up)
+#   layers    - layer images for the default variant (cache warm-up)
 #   server    - compose server image only
 #   tui       - compose tui image only
 #   publish   - build+compose then distribute, passing the variant to buildah
 #   clean     - remove running jails and the final/composable ocbin images
 # ---------------------------------------------------------------------------
 case "${1:-}" in
-compiler)
+layers)
   build_layers
   ;;
 
