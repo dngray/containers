@@ -212,22 +212,22 @@ tftp-build:
 tftp-clean:
     ./apps/tftp/tftp.sh clean
 
-# Build cold cache compiler layer for Opencode
+# Build cold cache layer catalog for Opencode via buildah
 [group('agents')]
 opencode-compiler:
     ./apps/opencode/opencode.sh compiler
 
-# Assemble backend vector and agent tool server
+# Assemble backend server image from composed buildah layers
 [group('agents')]
 opencode-server:
     ./apps/opencode/opencode.sh server
 
-# Extract compiled app into unprivileged local TUI
+# Assemble slim TUI client image from the opencode binary layer
 [group('agents')]
 opencode-tui:
     ./apps/opencode/opencode.sh tui
 
-# Push Opencode server and TUI images to container registry (`binary` = pinned upstream release)
+# Push Opencode server/TUI images (`full`=src+py/pg/rust, `full-binary`, `basic`, `basic-binary`)
 [group('agents')]
 opencode-publish variant="":
     ./apps/opencode/opencode.sh publish {{variant}}
