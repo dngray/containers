@@ -21,3 +21,28 @@ Everything runs through `just` (`just` alone prints the grouped command list).
 Scripts locate the repo themselves (`REPO_ROOT`) — no env var needed. The only
 thing installed on the host is `~/.local/bin/code-fortress`, symlinked into this
 repo; it injects `bin/` onto PATH so `ai-secure` resolves inside the fortress.
+
+## Fortress DB access
+
+Per-project Postgres credentials, if the agent should reach a database. Create
+the file before launching the seat:
+
+```
+~/.config/ai-fortress/opencode/<project>/pgpass.env   # chmod 600, dotenv
+```
+
+```
+PGHOST=192.168.52.x
+PGPORT=5432
+PGUSER=<user>
+PGPASSWORD=<password>
+PGDATABASE=<db>
+```
+
+It must be set (a launch without it simply skips the DB mount). Inside the seat
+the file lands at `~/.pgpass.env`; source it before psql:
+
+```sh
+set -a; . ~/.pgpass.env; set +a
+psql
+```
