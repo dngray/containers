@@ -24,7 +24,7 @@ layout {
                 // Tab 2: Active, interactive workspace prompt panel (Waits for server to serve, then attaches)
                 pane name="Goose Session" {
                     command "bash"
-                    args "-c" "fortress-probe --any-status --max 60 http://127.0.0.1:5005 || true; ai-secure goose-shell"
+                    args "-c" "ai-secure goose-shell"
                     focus true
                 }
             }

@@ -23,7 +23,7 @@ layout {
                 // Active interactive window (waits for the opencode server HTTP listener, then attaches)
                 pane name="OpenCode TUI" {
                     command "bash"
-                    args "-c" "fortress-probe --max 60 http://127.0.0.1:4096 || true; ai-secure shell"
+                    args "-c" "ai-secure shell"
                     focus true
                 }
             }
