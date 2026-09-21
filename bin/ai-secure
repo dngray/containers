@@ -31,7 +31,7 @@ case "$APP_TYPE" in
   EXTRA_FLAGS+=(
     --userns "keep-id"
     -v "$HOME/.cache/ai-fortress/aider:$JAIL_HOME/.cache"
-    -v "$HOME/.cache/ai-fortress/semble:$JAIL_HOME/.cache/semble"
+    -v "$HOME/.cache/ai-fortress/semble:$JAIL_HOME/.semble"
     -v "$HOME/.config/ai-fortress/aider:$JAIL_HOME/.config"
     -v "$HOME/.local/share/ai-fortress/aider:$JAIL_HOME/.local/share"
     -v "$HOME/.local/state/ai-fortress/aider:$JAIL_HOME/.local/state"
@@ -61,9 +61,10 @@ case "$APP_TYPE" in
     -v "$HOME/.cache/ai-fortress/opencode:$JAIL_HOME/.cache"
     -v "$HOME/.config/ai-fortress/opencode/share:$JAIL_HOME/.local/share/opencode"
     -v "$HOME/.config/ai-fortress/opencode/state:$JAIL_HOME/.local/state/opencode"
-    -v "$HOME/.cache/ai-fortress/semble:$JAIL_HOME/.cache/semble"
+    -v "$HOME/.cache/ai-fortress/semble:$JAIL_HOME/.semble"
     -v "$TARGET_PATH:$JAIL_WORK"
     -w "$JAIL_WORK"
+    -e "SEMBLE_CACHE_LOCATION=$JAIL_HOME/.semble"
   )
 
   # shellcheck disable=SC1091
@@ -114,7 +115,7 @@ case "$APP_TYPE" in
     --group-add keep-groups
     -v "$HOME/.cache/ai-fortress/goose:$JAIL_HOME/.cache"
     -v "$HOME/.config/ai-fortress/goose:$JAIL_HOME/.config/goose"
-    -v "$HOME/.cache/ai-fortress/semble:$JAIL_HOME/.cache/semble"
+    -v "$HOME/.cache/ai-fortress/semble:$JAIL_HOME/.semble"
     -v "$TARGET_PATH:$JAIL_WORK"
     -w "$JAIL_WORK"
     -e "GOOSE_PROVIDER=openai"
