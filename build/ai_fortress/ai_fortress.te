@@ -1,9 +1,14 @@
 policy_module(ai_fortress, 1.0)
 
+# This policy carries a consolidated hardening pass. Where a tightening was
+# considered and REJECTED, the "KEPT deliberately" / "intentionally NOT used"
+# note beside it states why. Do not strip those permissions blind.
+
 gen_require(`
     type container_runtime_t;
     type container_file_t;
     type sysfs_t;
+    type tmpfs_t;
     class process2 nnp_transition;
 ')
 
@@ -40,7 +45,11 @@ allow container_runtime_t fortress_agent_t:process2 { nnp_transition };
 ########################################
 # Network
 ########################################
+# execmem KEPT deliberately: the CPython 3.14 JIT executes from writable memory;
+# removing it was considered and breaks JIT at serve time.
 allow fortress_agent_t self:process { execmem fork signal_perms setsched };
+# shm { ... map } intentionally NOT used: `map` is not a valid class-shm perm
+# in the targeted policy (build fails); execmem + tmpfs file map cover mmap.
 allow fortress_agent_t self:shm { create destroy read write };
 
 # TCP/UDP for server and client
@@ -52,6 +61,9 @@ allow fortress_agent_t fortress_port_t:tcp_socket { name_bind name_connect };
 
 sysnet_dns_name_resolve(fortress_agent_t)
 corenet_tcp_connect_http_port(fortress_agent_t)
+corenet_tcp_connect_postgresql_port(fortress_agent_t)
+# corenet_udp_bind_all_nodes kept from base: it was dropped in a hardening
+# experiment, but DNS and the pg path need UDP egress.
 corenet_udp_bind_all_nodes(fortress_agent_t)
 corenet_tcp_bind_all_nodes(fortress_agent_t)
 
@@ -62,6 +74,8 @@ corenet_tcp_bind_all_nodes(fortress_agent_t)
 allow fortress_agent_t container_file_t:dir { list_dir_perms read open getattr search };
 allow fortress_agent_t container_file_t:file { read_file_perms execute map open getattr };
 allow fortress_agent_t container_file_t:lnk_file { read getattr };
+corecmd_exec_bin(fortress_agent_t)
+corecmd_exec_shell(fortress_agent_t)
 
 ########################################
 # Data Access
@@ -89,7 +103,7 @@ allowxperm fortress_agent_t {
 }:file ioctl { 0x5401 0x5450 0x5451 0x5413 };
 
 # Required for 'keep-id' and mapping
-allow fortress_agent_t self:cap_userns { fowner chown fsetid dac_override dac_read_search };
+allow fortress_agent_t self:cap_userns { fowner chown fsetid };
 
 # Transient symlinks for virtual environments
 allow fortress_agent_t self:lnk_file manage_lnk_file_perms;
@@ -100,6 +114,8 @@ allow fortress_agent_t self:lnk_file manage_lnk_file_perms;
 userdom_use_user_terminals(fortress_agent_t)
 dev_read_sysfs(fortress_agent_t)
 
+# kernel_read_proc_symlinks kept from base: it was dropped in a hardening
+# experiment; the Python/bun runtime needs /proc/self/exe-style symlink reads.
 kernel_read_proc_symlinks(fortress_agent_t)
 kernel_read_system_state(fortress_agent_t)
 fs_read_cgroup_files(fortress_agent_t)
@@ -107,7 +123,9 @@ fs_read_cgroup_files(fortress_agent_t)
 # Handle the .local tmpfs mount (map + execute for pip3)
 fs_manage_tmpfs_dirs(fortress_agent_t)
 fs_manage_tmpfs_files(fortress_agent_t)
-allow fortress_agent_t tmpfs_t:file execute;
+# tmpfs execute KEPT deliberately: pip3 runs its .local payload off this tmpfs
+# mount; removing it was considered and breaks package installs.
+allow fortress_agent_t tmpfs_t:file { execute execute_no_trans map };
 
 allow fortress_agent_t self:fifo_file manage_fifo_file_perms;
 allow fortress_agent_t self:unix_stream_socket create_stream_socket_perms;

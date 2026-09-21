@@ -67,6 +67,13 @@ case "$APP_TYPE" in
     -e "SEMBLE_CACHE_LOCATION=$JAIL_HOME/.semble"
   )
 
+  # Per-project DB creds as dotenv (see readme.md). Mount only when present —
+  # bind sources must exist at launch or podman aborts.
+  PGPASS_ENV="$HOME/.config/ai-fortress/opencode/$PROJECT_ID/pgpass.env"
+  if [ -f "$PGPASS_ENV" ]; then
+    EXTRA_FLAGS+=(-v "$PGPASS_ENV:$JAIL_HOME/.pgpass.env")
+  fi
+
   # shellcheck disable=SC1091
   [ -f "$HOME/.config/containers/containers.env" ] && . "$HOME/.config/containers/containers.env"
   REGISTRY="${REG_URL:-localhost}/library/opencode"
