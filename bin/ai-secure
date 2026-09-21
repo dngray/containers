@@ -81,8 +81,19 @@ case "$APP_TYPE" in
   if [ "$TOOL" == "shell" ]; then
     IMAGE="${REGISTRY}/opencode-tui:${OPENCODE_VARIANT:-latest}"
     EXTRA_FLAGS+=(-e "OPENCODE_SERVER_PASSWORD=$OPENCODE_SERVER_PASSWORD")
-    EXTRA_FLAGS+=("-i" "--tty")
-    CMD_ARGS=(attach "http://127.0.0.1:4096" --password "$OPENCODE_SERVER_PASSWORD" --dir ".")
+    EXTRA_FLAGS+=("-i" "--tty" "--entrypoint" "bash")
+    # Wait for the in-pod server listener before attaching. Runs inside the
+    # pod netns (shares 127.0.0.1 with the server); the old host-side probe
+    # died when the server went loopback-only and the host forwards were
+    # removed. 60s budget then proceed (same semantics as fortress-probe).
+    CMD_ARGS=(-ec '
+      deadline=$((SECONDS + 60))
+      until curl -fs -u "${OPENCODE_SERVER_USERNAME:-opencode}:${OPENCODE_SERVER_PASSWORD}" -o /dev/null --max-time 2 http://127.0.0.1:4096; do
+        [ "$SECONDS" -ge "$deadline" ] && break
+        sleep 0.5
+      done
+      exec opencode attach http://127.0.0.1:4096 --password "${OPENCODE_SERVER_PASSWORD}" --dir .
+    ')
   else
     IMAGE="${REGISTRY}/opencode-server:${OPENCODE_VARIANT:-latest}"
     EXTRA_FLAGS+=("-i")
@@ -136,8 +147,18 @@ case "$APP_TYPE" in
 
   if [ "$TOOL" == "goose-shell" ]; then
     IMAGE="${REGISTRY}/goose/goose-cli:latest"
-    EXTRA_FLAGS+=("-i" "--tty")
-    CMD_ARGS=(session)
+    EXTRA_FLAGS+=("-i" "--tty" "--entrypoint" "bash")
+    # Wait for the in-pod goose-server listener (5005) before starting the
+    # shell. In-pod netns share; the old host-side probe died when the host
+    # forwards were removed. 60s budget then proceed (fortress-probe parity).
+    CMD_ARGS=(-ec '
+      deadline=$((SECONDS + 60))
+      until curl -s -o /dev/null --max-time 2 http://127.0.0.1:5005; do
+        [ "$SECONDS" -ge "$deadline" ] && break
+        sleep 0.5
+      done
+      exec goose session
+    ')
   else
     IMAGE="${REGISTRY}/goose/goose-server:latest"
     EXTRA_FLAGS+=("-i")
