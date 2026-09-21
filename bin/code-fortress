@@ -81,9 +81,7 @@ podman pod create \
   --name "$POD_NAME" \
   --share net \
   --userns keep-id \
-  --network bridge \
-  -p 127.0.0.1:4096:4096/tcp \
-  -p 127.0.0.1:5005:5005/tcp
+  --network bridge
 
 # 4. Secrets Fetching
 echo "🔑 Unlocking fortress credentials..."

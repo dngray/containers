@@ -9,6 +9,7 @@ gen_require(`
     type container_file_t;
     type sysfs_t;
     type tmpfs_t;
+    type node_t;
     class process2 nnp_transition;
 ')
 
@@ -62,10 +63,18 @@ allow fortress_agent_t fortress_port_t:tcp_socket { name_bind name_connect };
 sysnet_dns_name_resolve(fortress_agent_t)
 corenet_tcp_connect_http_port(fortress_agent_t)
 corenet_tcp_connect_postgresql_port(fortress_agent_t)
-# corenet_udp_bind_all_nodes kept from base: it was dropped in a hardening
-# experiment, but DNS and the pg path need UDP egress.
-corenet_udp_bind_all_nodes(fortress_agent_t)
-corenet_tcp_bind_all_nodes(fortress_agent_t)
+
+# Listener requires node_bind on node_t: this host labels 127.0.0.0/8 (and all
+# other addresses) as node_t, so any in-pod TCP listener — including the
+# loopback 127.0.0.1:4096 the server binds — needs node_bind. There is no
+# distinct loopback nodecon to narrow this any further. Listen-side hardening
+# instead comes from the name_bind scoping (fortress_port_t only, so no
+# arbitrary-port listeners). UDP node_bind likewise restored: the seat's DNS
+# resolver is reached over a UDP client socket (systemd-resolved on
+# 127.0.0.53:53), whose implicit source-port bind requires node_bind — without
+# it, uv/pip installs fail with DNS/Permission-denied (os error 13).
+allow fortress_agent_t node_t:tcp_socket node_bind;
+allow fortress_agent_t node_t:udp_socket node_bind;
 
 ########################################
 # Internal Container File System Execution
@@ -83,7 +92,7 @@ corecmd_exec_shell(fortress_agent_t)
 
 # Workspace source files
 allow fortress_agent_t fortress_src_t:dir { manage_dir_perms relabelfrom relabelto };
-allow fortress_agent_t fortress_src_t:file { manage_file_perms relabelfrom relabelto map ioctl execute };
+allow fortress_agent_t fortress_src_t:file { manage_file_perms relabelfrom relabelto map ioctl };
 allow fortress_agent_t fortress_src_t:lnk_file { manage_lnk_file_perms relabelfrom relabelto };
 
 # Needed so uv can execute compiled wheels/binaries inside persistent cache folder
@@ -112,13 +121,13 @@ allow fortress_agent_t self:lnk_file manage_lnk_file_perms;
 # Standard Infrastructure & Kernel Lookups
 ########################################
 userdom_use_user_terminals(fortress_agent_t)
-dev_read_sysfs(fortress_agent_t)
 
-# kernel_read_proc_symlinks kept from base: it was dropped in a hardening
-# experiment; the Python/bun runtime needs /proc/self/exe-style symlink reads.
-kernel_read_proc_symlinks(fortress_agent_t)
-kernel_read_system_state(fortress_agent_t)
+# sysfs dev reads and /proc symlink reads stay dropped (no AVCs fired for
+# them across the workload). cgroup + system-state reads were restored on
+# AVC evidence: the runtime (node/opencode/memory-guard) reads cgroup2
+# cpu/memory limits and /proc/version + /proc/meminfo at boot.
 fs_read_cgroup_files(fortress_agent_t)
+kernel_read_system_state(fortress_agent_t)
 
 # Handle the .local tmpfs mount (map + execute for pip3)
 fs_manage_tmpfs_dirs(fortress_agent_t)
@@ -130,6 +139,9 @@ allow fortress_agent_t tmpfs_t:file { execute execute_no_trans map };
 allow fortress_agent_t self:fifo_file manage_fifo_file_perms;
 allow fortress_agent_t self:unix_stream_socket create_stream_socket_perms;
 
-# Container runtime fd/fifo for logging
-allow fortress_agent_t container_runtime_t:fd use;
+# FIFO to the container runtime KEPT deliberately: podman attach/logs routes
+# opencode's stdio through container_runtime_t pipes; removing this rule denies
+# read/write at seat start (server fails to boot). The specific `fd use` on
+# container_runtime_t was dropped, but the boolean-gated `domain_fd_use` rule
+# still permits fd passing until that boolean is disabled.
 allow fortress_agent_t container_runtime_t:fifo_file { read write append getattr ioctl };
