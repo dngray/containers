@@ -50,8 +50,11 @@
 # ---------------------------------------------------------------------------
 #   * `buildah mount` needs an unshared user+mount namespace when running
 #     rootless, so the script re-execs itself once under `buildah unshare`.
-#   * The host cache bind-mounts carry no SELinux label: build-time access is
-#     fine unlabelled, and the runtime label comes from the ai_fortress policy
+#   * The host cache bind-mounts rely on SELinux type `container_file_t` so the
+#     build-time `container_t` domain can manage them (see selinux_cache_guard
+#     below). The fortress policy labels $HOME/{src,workspace} as fortress_src_t,
+#     so under Enforcing the build cache needs an fcontext exception; the runtime
+#     label comes from the ai_fortress policy
 #     (`--security-opt label=type:fortress_agent_t` in bin/ai-secure).
 #
 # Subcommands: layers | server | tui | build
@@ -114,6 +117,37 @@ TUI_IMG="${NS}/opencode-tui"
 APTDROP='rm -f /etc/apt/apt.conf.d/*clean*; printf "APT::Keep-Downloaded-Packages \"true\";\n" > /etc/apt/apt.conf.d/01keep-debs; printf "Dir::Cache::archives \"/mnt/host_cache/apt_cache\";\n" >> /etc/apt/apt.conf.d/01keep-debs'
 
 mkdir -p "${DL}" "${STAGE}" "${CACHE}/apt_cache/partial"
+
+# ---------------------------------------------------------------------------
+# selinux_cache_guard()
+#
+# Description: fails fast when SELinux inhibits the build cache. The fortress
+#   policy labels $HOME/{src,workspace}(/.*)? as fortress_src_t, a type the
+#   build-time container_t domain may not read/write (only the runtime
+#   fortress_agent_t domain can). A cache under the repo therefore needs the
+#   container_file_t type; otherwise apt hits AVC denials on the /mnt/host_cache
+#   bind mount ("E: Unable to lock directory .../apt_cache/", exit status 100).
+#   Relabling needs root, so this only diagnoses + prints the fix.
+# Globals:
+#   CACHE (string): host cache dir; must resolve to container_file_t
+# Outputs:
+#   Exits 1 with the remediation snippet when the label is wrong
+# ---------------------------------------------------------------------------
+selinux_cache_guard() {
+  [ "$(getenforce 2>/dev/null || echo Disabled)" = Enforcing ] || return 0
+  cache_label=$(stat -c '%C' "${CACHE}" 2>/dev/null || true)
+  case "${cache_label}" in
+    *fortress_src_t*)
+      error "SELinux: ${CACHE} is labeled fortress_src_t, which container_t (the build domain) cannot access."
+      item "Relabel the build cache as container_file_t, then re-run:"
+      info "  sudo semanage fcontext -a -t container_file_t '${REPO_ROOT}/build/opencode/cache(/.*)?'"
+      info "  sudo restorecon -RFv ${REPO_ROOT}/build/opencode/cache"
+      exit 1
+      ;;
+  esac
+}
+selinux_cache_guard
+
 
 # ---------------------------------------------------------------------------
 # img_exists(<image>)
