@@ -2,6 +2,18 @@
 HOME_DIR/src(/.*)?                          gen_context(system_u:object_r:fortress_src_t,s0)
 HOME_DIR/workspace(/.*)?                    gen_context(system_u:object_r:fortress_src_t,s0)
 
+# Build-time container caches live inside the repo tree (under the src|workspace
+# prefixes above), but fortress_src_t is restricted to the fortress_agent_t runtime
+# domain; the build-time container_t (svirt) domain gets AVC-denied on it (apt lock
+# EPERM). Keep the opencode build cache container_file_t so build containers can
+# manage it. The longer prefix wins over HOME_DIR/src|workspace.
+# Layouts covered: ~/src/containers, ~/src/github.com/dngray/containers, and
+# ~/workspace/github.com/dngray/containers (any other checkout needs a local
+# semanage override; see docs/DEPLOYMENT.md).
+HOME_DIR/src/containers/build/opencode/cache(/.*)? gen_context(system_u:object_r:container_file_t,s0)
+HOME_DIR/src/github.com/dngray/containers/build/opencode/cache(/.*)? gen_context(system_u:object_r:container_file_t,s0)
+HOME_DIR/workspace/github.com/dngray/containers/build/opencode/cache(/.*)? gen_context(system_u:object_r:container_file_t,s0)
+
 # Fortress Specific Persistence (Covers share, cache, config, and state)
 HOME_DIR/\.config/ai-fortress(/.*)?         gen_context(system_u:object_r:fortress_config_t,s0)
 HOME_DIR/\.cache/ai-fortress(/.*)?          gen_context(system_u:object_r:fortress_cache_t,s0)
