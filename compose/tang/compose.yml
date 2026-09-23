@@ -1,0 +1,38 @@
+name: tang
+services:
+  tang:
+    extends:
+      file: ../_common/app.yml
+      service: app
+    build:
+      context: ../../build/tang
+      dockerfile: Dockerfile
+    container_name: tang
+    image: localhost/tang
+    # image: docker.io/padhihomelab/tang
+    hostname: tang
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+    environment:
+      - DOCKER_UID=1003
+      - DOCKER_GID=1003
+      - ENABLE_IPv4=1
+      - ENABLE_IPv6=0
+    volumes:
+      - /opt/appdata/tang/db:/db:rw
+    networks:
+      frontend:
+      traefik:
+
+networks:
+  frontend:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 172.35.0.0/16
+        - subnet: fd35:1::/48
+  traefik:
+    external: true
