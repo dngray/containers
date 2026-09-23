@@ -22,6 +22,11 @@ docker-up-build:
 docker-traefik-build:
     ./compose/manage-compose.sh traefik-build
 
+# Rebuild Tang NBDE server
+[group('docker')]
+docker-tang-build:
+    ./compose/manage-compose.sh tang-build
+
 # Rebuild music stack (mpd, snapcast, cyp)
 [group('docker')]
 docker-music-build:
