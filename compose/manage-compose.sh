@@ -11,7 +11,7 @@ ENV_FILE="compose/.env"
 
 # Deploy stages: wireguard tunnels (serial), independent services (parallel), edge proxy (serial)
 SERVICES_STAGE1="stepca wg1_qbt wg2_usenet wg3_general"
-SERVICES_STAGE2="beets caddy cinny flexo harbor mumble music powerwall rss smb syncthing vault vaultwarden"
+SERVICES_STAGE2="beets caddy cinny flexo harbor mumble music powerwall rss smb syncthing tang vault vaultwarden"
 SERVICES_STAGE3="traefik"
 
 # Privileged Handler Function: Prioritizes sudo over run0
@@ -89,6 +89,11 @@ up-build)
 traefik-build)
   info "==> Building edge proxy assets: traefik..."
   run_compose "traefik" "up" "--build"
+  ;;
+
+tang-build)
+  info "==> Building Tang NBDE server: tang..."
+  run_compose "tang" "up" "--build"
   ;;
 
 music-build)
