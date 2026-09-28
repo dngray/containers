@@ -15,7 +15,8 @@
 # Layer  catalog (all under "${REG_URL}/library/opencode"):
 #   base          v1                Debian runtime + tools + opencode user
 #   tui-base      v1                slim Debian for the attach-only TUI
-#   pydex         <PYVER>           sigstore-verified Python-from-source
+#   pydex         <PYVER>           sigstore-verified Python-from-source; the
+#                                   image's ONLY python (see UV_PYTHON below)
 #   ocbin-source  <hash>            opencode compiled from source (bun/turbo)
 #   ocbin-binary  <hash>            pinned upstream, sha256-verified release
 #   pgassets      <PGVER>           pgclient + pgvector (payload staging dir)
@@ -23,22 +24,44 @@
 #   gobin         latest            Go CLI tools (yq, gomplate) + hadolint release binary
 #   uvbin         latest            uv / uvx binaries on a scratch rootfs
 #   mcp           latest            MCP/LSP tools payload in /home/opencode/.local
-#   devtools      latest            agent validation/debug toolchain, staged in /dev-layer
+#   ansible       latest            pinned uv-managed ansible-core + Galaxy
+#                                   collections, staged in /ansible-layer
+#   devtools      latest            agent validation/debug toolchain, merged from
+#                                   the layer's own /usr,/etc,/var
 #
 # Variant  matrix (STACK x SRC) -> which layers final images pick:
-#   full + source   pydex + pgassets + rusttools + ocbin-source (default)
-#   full + binary   pydex + pgassets + rusttools + ocbin-binary
-#   basic + source  base                + ocbin-source (Debian python, slim)
-#   basic + binary  base                + ocbin-binary
-# Every variant also merges uvbin, gobin, mcp and devtools. The tui image is
+#   full + source   pydex + mcp + ansible + pgassets + rusttools + ocbin-source (default)
+#   full + binary   pydex + mcp + ansible + pgassets + rusttools + ocbin-binary
+#   basic + source  pydex + mcp + ansible                  + ocbin-source
+#   basic + binary  pydex + mcp + ansible                  + ocbin-binary
+# full adds postgres and lean-ctx over basic; that is the only difference.
+# Every variant also merges uvbin, gobin and devtools. The tui image is
 # tui-base + ocbin (attach-only, so it deliberately gets none of them).
 #
+# Python topology: every variant builds FROM pydex, so the image has one
+# Python and it is ${PYVER}. Debian's python3 still rides along in base
+# because build_pydex needs it to bootstrap the sigstore venv, but nothing
+# resolves to it at runtime. Do not add python3-* apt packages anywhere --
+# they are built for Debian's 3.13 and are useless to a 3.14 venv. Python
+# tooling goes in through uv with UV_PYTHON pinned to pydex, otherwise uv
+# downloads and uses a managed interpreter of its own (its python-preference
+# default is "managed") and the venvs stop being reproducible.
+#
+# That decoy is 3.13.x and it cannot be deleted: on trixie apt and dpkg are
+# themselves python3 programs, so removing it breaks the package manager in
+# the image. What keeps the agent honest is ordering -- python_path_prefix puts
+# /opt/python-${PYVER}/bin ahead of /usr/bin, and /usr/local/bin/python3 is a
+# symlink to the same -- plus the build-time import assertion in build_ansible.
+# A tool that ignores both (an absolute path, a hardcoded #!/usr/bin/python3
+# shebang from a Debian package, a venv it did not expect) still lands on the
+# wrong one, so anything the agent runs should be resolved by name off PATH.
+#
 # Why devtools is a layer and not more build_base packages: `ensure` short-
-# circuits on image presence, and the full-stack finals are `buildah from
-# ${PYDEX_IMG}`, so anything appended to build_base only reaches them after
-# base AND pydex are both force-removed and rebuilt (pydex alone is ~2.4G).
-# A separate layer keeps the validation toolchain independent of that chain,
-# exactly like the old yq-only layer did.
+# circuits on image presence, and the finals are `buildah from ${PYDEX_IMG}`,
+# so anything appended to build_base only reaches them after base AND pydex are
+# both force-removed and rebuilt (pydex alone is ~2.4G). A separate layer keeps
+# the validation toolchain independent of that chain, exactly like the old
+# yq-only layer did.
 #
 # opencode.json is copied verbatim from build/opencode/config/<api>/opencode.jsonc
 # (the full-stack config); the basic stack drops the lean_ctx entry via jq.
@@ -126,6 +149,33 @@ HADOLINT_VERSION="${HADOLINT_VERSION:-v2.15.1}"
 GOMPLATE_VERSION="${GOMPLATE_VERSION:-v5.2.0}"
 BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
 
+# Ansible validation environment. Pinned rather than floating: the agent uses
+# this to validate its own infrastructure work, so a silent upstream jump would
+# change validation results without any image change to explain it.
+# ansible-core is installed DIRECTLY, not as a dependency of the community
+# `ansible` metapackage, and not as a uv tool. The metapackage declares exactly
+# one console script -- the `ansible-community` info stub -- while the ten real
+# CLIs (ansible, ansible-playbook, ansible-galaxy, ansible-doc, ...) belong to
+# ansible-core, so the layer used to die on a missing ansible-galaxy before it
+# could bake its collections. A tool env was the wrong fix for a second reason:
+# it is invisible to the interpreter `python3` resolves to, so `import ansible`
+# and its Jinja2/PyYAML deps stayed unresolved for every ad-hoc interpreter
+# call and for the LSP. So ansible-core goes into the pydex python itself
+# (uv pip install --system, not pip: UV_PYTHON pins the target), the ten CLIs
+# come from the bin dir that is first on PATH, and the install run asserts the
+# import. That is also the cheaper of the two shapes -- the alternative is a
+# third copy of core, since the lint env carries its own. ansible-lint 26.9.0
+# requires ansible-core>=2.16.19,!=2.17.*, so it resolves the same core.
+# The metapackage's own bundled collections were never usable either: they sit
+# in the tool venv's site-packages, which ANSIBLE_COLLECTIONS_PATH (set to the
+# staged payload in compose_server) does not search. Dropping it costs 51MB and
+# that one stub; the collections the agent actually gets are the two baked
+# below.
+ANSIBLE_CORE_VERSION="${ANSIBLE_CORE_VERSION:-2.21.4}"
+ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION:-26.9.0}"
+ANSIBLE_POSIX_VERSION="${ANSIBLE_POSIX_VERSION:-2.2.2}"
+ANSIBLE_COMMUNITY_GENERAL_VERSION="${ANSIBLE_COMMUNITY_GENERAL_VERSION:-13.4.0}"
+
 : "${OPENCODE_TAG:=v${LATEST_VERSION:-1.18.33}}"
 : "${RESOLVED_HASH:?resolve_version must run first}"
 
@@ -138,6 +188,7 @@ GOBIN_IMG="${NS}/gobin:latest"
 UVBIN_IMG="${NS}/uvbin:latest"
 MCP_IMG="${NS}/mcp:latest"
 DEVTOOLS_IMG="${NS}/devtools:latest"
+ANSIBLE_IMG="${NS}/ansible:latest"
 OC_SRC_IMG="${NS}/ocbin-source:${RESOLVED_HASH}"
 OC_BIN_IMG="${NS}/ocbin-binary:${RESOLVED_HASH}"
 SERVER_IMG="${NS}/opencode-server"
@@ -259,6 +310,10 @@ ocbin_for() {
 build_base() {
   local container
   container=$(buildah from docker.io/library/debian:trixie-slim)
+  # python3/python3-venv are Debian's 3.13 and stay ONLY to bootstrap
+  # build_pydex's sigstore venv -- they are not the image's Python and nothing
+  # at runtime resolves to them. Do not drop them, and do not add python3-*
+  # library packages here: those are built for 3.13 and useless to pydex.
   buildah config --env DEBIAN_FRONTEND=noninteractive "$container"
   buildah run --volume "${CACHE}:/mnt/host_cache" "$container" -- bash -ec "
     set -e
@@ -266,7 +321,8 @@ build_base() {
     ${APTDROP}
     apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl gcc libc6-dev coreutils fd-find findutils fzf gawk \
-      git jq ripgrep sed util-linux shellcheck nodejs npm python3 python3-venv
+      git jq ripgrep sed util-linux shellcheck nodejs npm \
+      python3 python3-venv
     ln -sf \"\$(command -v fdfind)\" /usr/local/bin/fd
   "
   buildah copy "$container" "${REPO_ROOT}/build/opencode/roots.pem" /usr/local/share/ca-certificates/roots.crt
@@ -335,7 +391,9 @@ build_tui_base() {
 #   VERIFIED release tarball (identity hugo@python.org, GitHub OIDC) with
 #   optimizations + LTO + experimental JIT, then commits. The tarball and
 #   provenance bundle are cached on the host so verification only happens
-#   once. Requires clang-19/llvm-19 for the JIT build.
+#   once. Requires clang-19/llvm-19 for the JIT build. The run is root with
+#   HOME=/root exported inside it: the image env carries the agent's HOME, and
+#   a root run must never write into it (see the note in the body).
 # Globals:
 #   PYVER (string): CPython version; selects tarball, /opt prefix and tag
 #   BUILD_JOBS (int): parallelism for the CPython make
@@ -351,6 +409,15 @@ build_pydex() {
   python_sigstore_bundle="Python-${PYVER}.tar.xz.sigstore"
   buildah run --volume "${CACHE}:/mnt/host_cache" "$container" -- bash -ec "
     set -e
+    # This run is root, and base bakes HOME=/home/opencode into the image env,
+    # so the sigstore bootstrap's pip writes its wheel cache into the agent's
+    # home AS ROOT: /home/opencode/.cache ships root-owned inside the pydex
+    # layer, and every layer built on pydex then dies installing anything as
+    # --user opencode (uv: \"Failed to initialize cache at
+    # /home/opencode/.cache/uv\"). Point root's HOME at root's own home for
+    # this run; the committed image keeps the agent's HOME, so this stays an
+    # export inside the run rather than a buildah config --env.
+    export HOME=/root
     apt-get update && apt-get install -y --no-install-recommends \
       build-essential libssl-dev zlib1g-dev libncurses5-dev libreadline-dev \
       libsqlite3-dev liblzma-dev libffi-dev clang-19 llvm-19 llvm-19-dev
@@ -378,6 +445,7 @@ build_pydex() {
     make -j${BUILD_JOBS}
     make install
     cd /tmp && rm -rf Python-${PYVER} /tmp/${python_tarball} /tmp/${python_sigstore_bundle}
+    rm -rf /home/opencode/.cache
   "
   buildah run "$container" -- bash -ec "
     ln -sf /opt/python-${PYVER}/bin/python3 /usr/local/bin/python3
@@ -662,33 +730,76 @@ build_uvbin() {
 # build_mcp()
 #
 # Description: pre-installs the MCP/LSP tool payload into
-#   /home/opencode/.local (uv tools + global npm packages) as the opencode
-#   user; the whole .local tree is later merged into composed servers.
-#   Includes: semble[mcp], code-index-mcp, python-lsp-server, repomix,
-#   bash-language-server, yaml-language-server, dockerfile-language-server,
-#   @ast-grep/cli, pyright, check-jsonschema. Declares the uv tool/npm prefix
-#   env the tools need.
+#   /home/opencode/.local (uv tools + global npm packages) as ROOT, then
+#   chowns it to the image's own `opencode` user; the whole .local tree is
+#   later merged into composed servers, which chown /home/opencode again.
+#   Includes: semble[mcp], code-index-mcp, repomix, bash-language-server,
+#   yaml-language-server, dockerfile-language-server, @ast-grep/cli, pyright,
+#   check-jsonschema, plus python-lsp-server installed INTO the pydex python
+#   (not a uv tool -- each uv tool below lands on the image's one Python via
+#   UV_PYTHON; pylsp must be that same interpreter, because jedi resolves
+#   against get_default_environment().executable, the interpreter RUNNING
+#   pylsp). Declares the uv tool/npm prefix env the tools need.
+#   Builds FROM pydex with UV_PYTHON pinned, so every uv tool here lands on the
+#   image's one Python instead of a uv-managed download of its own.
 # Globals:
-#   CACHE (string): host cache dir; apt debs bound at /mnt/host_cache
+#   PYDEX_IMG, UVBIN_IMG (string): base images (uv is not in pydex)
 #   MCP_IMG (string): image name committed when complete
 # Outputs:
-#   Commits ${MCP_IMG} with the populated /home/opencode/.local
+#   Commits ${MCP_IMG} with the populated /home/opencode/.local plus a staged
+#   /mcp-layer/opt (pylsp's interpreter trees) that compose_server contents-
+#   merges over the pydex /opt the finals already carry.
 # ---------------------------------------------------------------------------
 build_mcp() {
   local uv_container container
-  container=$(buildah from "${BASE_IMG}")
+  container=$(buildah from "${PYDEX_IMG}")
   uv_container=$(buildah from "${UVBIN_IMG}")
   buildah copy --from="$uv_container" "$container" /uv /uvx /bin/
   buildah rm "$uv_container"
   buildah config --env HOME=/home/opencode "$container"
   buildah config --env UV_TOOL_DIR=/home/opencode/.local/share/uv/tools "$container"
   buildah config --env UV_TOOL_BIN_DIR=/home/opencode/.local/bin "$container"
+  # uv's python-preference defaults to "managed", i.e. it downloads and uses
+  # its own CPython and ignores both pydex and the system one. That would leave
+  # the MCP/LSP tools on a floating interpreter that nothing in the build
+  # controls. UV_PYTHON pins every uv tool below to pydex ${PYVER}.
+  buildah config --env UV_PYTHON="/opt/python-${PYVER}/bin/python3" "$container"
   buildah config --env NPM_CONFIG_PREFIX=/home/opencode/.local "$container"
-  buildah run --volume "${CACHE}:/mnt/host_cache" --user opencode "$container" -- bash -ec '
+  # Root, not --user opencode, for the same two reasons build_pydex points its
+  # own HOME at root's home:
+  #   * the parent layer is shared through the registry and is built by root
+  #     runs, so $HOME can carry root-owned state a non-root uid cannot write
+  #     past -- that is exactly how a cached pydex killed this layer;
+  #   * a bind mount is not userns-rewritten, so the host cache appears inside
+  #     the container as uid 0 and only root can write it. Nothing in this body
+  #     needs it (uv and npm both cache under $HOME), so it is not mounted.
+  # The chown is by NAME, so it follows the uid the image's passwd gives
+  # `opencode` rather than the baking host's HOST_UID -- the two differ per
+  # host (systemd-homed bakes 60139, a normal account bakes 1000) and layers
+  # are pushed to a registry both kinds of host build from.
+  buildah run "$container" -- bash -ec '
     set -e
     uv tool install --with mcp "semble[mcp]"
     uv tool install "code-index-mcp"
-    uv tool install "python-lsp-server"
+    # pylsp is the exception to the uv tool rule: it goes into the pydex
+    # python ITSELF, not a tool env. jedi, its import engine, resolves against
+    # get_default_environment().executable -- the interpreter RUNNING pylsp,
+    # not whatever PATH first names -- so a tool-env pylsp reads a venv whose
+    # site-packages has neither jinja2 nor yaml, and no PYTHONPATH fix helps.
+    # uv, not pip, for the same reason build_ansible uses it: UV_PYTHON pins
+    # the target and that interpreter carries no PEP 668 marker. The assertion
+    # proves the mechanism rather than trusting PATH, and no tool-env copy is
+    # left behind to uninstall: this run never creates one.
+    uv pip install --system --python "$UV_PYTHON" "python-lsp-server"
+    # The which() check runs first: while a tool env is the regression, /opt
+    # carries no jedi yet, so importing jedi up front would report
+    # ModuleNotFoundError instead of the actual wrong location. It has to be
+    # PATH-scoped to the pydex bin dir: the build run inside this layer does
+    # carry the runtime PATH -- compose_server stops /opt/python-${PYVER}/bin
+    # first on the final image (os.path.dirname(sys.executable), since the
+    # assertion runs through UV_PYTHON), so a bare shutil.which() here scans
+    # pydex default PATH and finds nothing even on a correct install.
+    "$UV_PYTHON" -c "import os, shutil, sys, jedi; p=shutil.which(\"pylsp\", path=os.path.dirname(sys.executable)); assert p and p.startswith(\"/opt/python-\"), (\"pylsp on %r\" % p); e=jedi.api.environment.get_default_environment(); assert e.executable.startswith(\"/opt/python-\"), (\"jedi env %r\" % e.executable); print(\"pylsp OK\", p, e.executable)"
     npm install -g \
       --registry=https://registry.npmjs.org \
       --network-concurrency=8 \
@@ -699,7 +810,18 @@ build_mcp() {
       @ast-grep/cli pyright
     uv tool install "check-jsonschema"
     rm -rf /home/opencode/.npm /home/opencode/.cache
+    chown -R opencode: /home/opencode/.local
   '
+  buildah run "$container" -- bash -ec "
+    set -e
+    mkdir -p /mcp-layer/opt/python-${PYVER}/lib/python${PYVER%.*}
+    # pylsp is installed into the pydex python (see the install run), so its
+    # site-packages and bin travel with the payload the same way the ansible
+    # layer's do. Left root-owned to match the /opt pydex already puts in the
+    # finals; the chown above covers /home/opencode only.
+    cp -a /opt/python-${PYVER}/lib/python${PYVER%.*}/site-packages /mcp-layer/opt/python-${PYVER}/lib/python${PYVER%.*}/
+    cp -a /opt/python-${PYVER}/bin /mcp-layer/opt/python-${PYVER}/
+  "
   buildah commit --rm "$container" "${MCP_IMG}"
 }
 
@@ -710,41 +832,195 @@ build_mcp() {
 #   can be added to or changed without invalidating the base -> pydex chain.
 #   Go and Rust are NOT here: they arrive as layers already (the gobin layer
 #   for go, rustup in build_rusttools for lean-ctx).
-#   Everything apt scatters over the rootfs is staged into /dev-layer/{usr,etc,var}
-#   so compose_server can cherry-pick it with merge_payload.
+#   apt installs straight into the rootfs and the layer is committed as-is;
+#   compose_server merges /usr, /etc and /var straight out of the image. This
+#   layer used to stage a copy into /dev-layer/{usr,etc,var} first, which was
+#   pure duplication -- the whole base filesystem ended up in the layer twice
+#   (once at /usr, once at /dev-layer/usr) and compose merged only the
+#   duplicate back out. It cost ~1GB per layer and bought no isolation, since
+#   /dev-layer was not shipped, just a copy of paths that were already there.
+#   Contrast build_pgassets, which stages only targeted paths (/pg-layer/...)
+#   because it installs those tools under a dedicated prefix and the rest of
+#   its /usr is base's, unchanged.
 # Globals:
 #   CACHE (string): host cache dir; apt debs bound at /mnt/host_cache
 #   APTDROP (string): apt snippet pinning debs to the host cache
 #   DEVTOOLS_IMG (string): image name committed when complete
 # Outputs:
-#   Commits ${DEVTOOLS_IMG} with the /dev-layer payload staging tree
+#   Commits ${DEVTOOLS_IMG} with the toolchain installed in the rootfs
 # ---------------------------------------------------------------------------
 build_devtools() {
   local container
   container=$(buildah from "${BASE_IMG}")
   buildah config --env DEBIAN_FRONTEND=noninteractive "$container"
+  # ansible/ansible-core/ansible-lint are deliberately NOT here. They come from
+  # the uv-managed environment in build_ansible so they run against pydex
+  # ${PYVER} instead of Debian's system python3 -- the point of moving ansible
+  # off the apt list. No python3-* libraries are installed here either: apt
+  # wheels are built for Debian's python3, so they are useless to a 3.14 venv.
+  # yamllint is a standalone binary and needs neither.
+  # dnscrypt-proxy is here on purpose -- the agent validates the config it
+  # writes with dnscrypt-proxy --check. Know what that buys: on 2.1.8 (what
+  # trixie ships, above the 2.0.46 floor) --check and --list-all both exit 0
+  # on a STAMP with a single mistyped base64 character, byte-identical output
+  # and all. Only structural damage trips it, rc=255 with [FATAL] Stamp error.
+  # So --check is not a content check: review stamps in git, and use this for
+  # the shape of the file.
   buildah run --volume "${CACHE}:/mnt/host_cache" "$container" -- bash -ec "
     set -e
     mkdir -p /mnt/host_cache/apt_cache/partial
     ${APTDROP}
     apt-get update && apt-get install -y --no-install-recommends \
       just \
-      yamllint ansible-core ansible-lint \
-      nftables dnscrypt-proxy \
+      yamllint \
+      dnscrypt-proxy \
       iproute2 iputils-ping bind9-dnsutils netcat-openbsd traceroute \
       procps psmisc lsof file tree strace \
       skopeo gnupg unzip zstd rsync sqlite3
   "
-  # ansible-core Depends python3-yaml + python3-jinja2, so the basic (Debian
-  # python3) stack picks those up from here rather than needing its own list.
+  buildah commit --rm "$container" "${DEVTOOLS_IMG}"
+}
+
+# ---------------------------------------------------------------------------
+# build_ansible()
+#
+# Description: the pinned uv-managed Python/Ansible validation environment.
+#   Builds on PYDEX_IMG so ansible runs against the same CPython ${PYVER} the
+#   agent's other tooling uses, not Debian's system python3 -- the point of
+#   moving ansible off the apt list in build_devtools.
+#   Installs ansible-core INTO the pydex python (uv pip install --system, so
+#   the interpreter `python3` resolves to can import it) and ansible-lint as a
+#   uv tool env (it needs black, ruamel.yaml and the rest of that closure),
+#   then bakes the Galaxy collections (ansible.posix, community.general) into
+#   the payload so validation works offline at runtime. Both are named
+#   directly rather than pulled in as a dependency of the community `ansible`
+#   package, which carries only the ansible-community stub.
+#   Staged at /ansible-layer so compose_server can cherry-pick it the same way
+#   it does for the mcp layer: /ansible-layer/home/opencode for the tool env and
+#   the collections, /ansible-layer/opt for ansible-core's site-packages and
+#   the CLI scripts.
+# Args:
+#   None
+# Globals:
+#   PYDEX_IMG, UVBIN_IMG (string): base images (uv is not in pydex)
+#   ANSIBLE_CORE_VERSION, ANSIBLE_LINT_VERSION (string): pinned PyPI versions
+#   ANSIBLE_POSIX_VERSION, ANSIBLE_COMMUNITY_GENERAL_VERSION (string): pinned
+#     Galaxy collection versions
+#   CACHE (string): host build cache, used to keep the Galaxy tarballs
+# Outputs:
+#   Commits ${ANSIBLE_IMG} with /ansible-layer staged
+# ---------------------------------------------------------------------------
+build_ansible() {
+  local container uv_container
+  container=$(buildah from "${PYDEX_IMG}")
+  uv_container=$(buildah from "${UVBIN_IMG}")
+  buildah copy --from="$uv_container" "$container" /uv /uvx /bin/
+  buildah rm "$uv_container"
+  buildah config --env HOME=/home/opencode "$container"
+  buildah config --env UV_TOOL_DIR=/home/opencode/.local/share/uv/tools "$container"
+  buildah config --env UV_TOOL_BIN_DIR=/home/opencode/.local/bin "$container"
+  buildah config --env UV_PYTHON="/opt/python-${PYVER}/bin/python3" "$container"
+  # Both runs below are root, for the same two reasons as build_mcp's: a bind
+  # mount is not userns-rewritten, so the host cache (owned by the invoking
+  # uid) appears inside the container as uid 0 and only root can write it; and
+  # the parent layer is shared through the registry and built by root runs, so
+  # $HOME can carry root-owned state a non-root uid cannot write past. Galaxy
+  # is the one step that reaches a non-PyPI index and the one step that writes
+  # the host cache, so it keeps its own run and the volume stays on that run
+  # only -- the install run does not mount it.
+  # The payload is chowned to the image's own `opencode` user (by NAME, so it
+  # follows the image's uid rather than the baking host's HOST_UID) before it
+  # is staged, so the layer is uid-owned on its own; compose_server chowns
+  # /home/opencode again after the merge, so neither copy depends on the other.
+  # ANSIBLE_GALAXY_CACHE_DIR keeps the tarballs on the host cache (the supported
+  # knob; `collection install` has no --download-path, that flag is on
+  # `download`). build_base sets no PATH, so the bin dir beside the pydex
+  # python is not on it either -- call ansible-galaxy by absolute path rather
+  # than adding a PATH.
+  # The version pins come in as $1/$2/$3 rather than being interpolated, so
+  # the install run's body can stay single-quoted (like build_mcp) and keep its
+  # comments free of quoting games.
+  buildah run "$container" -- bash -ec '
+    set -e
+    # ansible-core goes into the pydex python ITSELF, not into a uv tool env.
+    # A tool env is invisible to the interpreter that `python3` resolves to, so
+    # `python3 -c "import ansible"`, the ad-hoc interpreter work and the LSP all
+    # come up empty against it -- and ansible-core drags in Jinja2 and PyYAML, so
+    # those are empty too. uv, not pip, because UV_PYTHON pins the target and
+    # uv does not re-resolve an interpreter the way a bare `pip` can; --system
+    # is what lets it write to a non-venv interpreter, and that interpreter
+    # carries no PEP 668 marker, so nothing needs --break-system-packages.
+    # Installing here rather than alongside the tool env is also the cheaper
+    # half of the choice: the ten CLIs land in the bin dir beside the pydex
+    # python, which is first on PATH, so there is no second copy to link into
+    # .local/bin.
+    uv pip install --system --python "$UV_PYTHON" \
+      "ansible-core==$1"
+    # ansible-lint keeps its own tool env: it needs black, ruamel.yaml and the
+    # rest of its closure, and `uv tool install` is the only thing here that
+    # resolves that. It also carries its own ansible-core, which is the second
+    # and last copy -- the version assertion below has to cover it.
+    uv tool install \
+      "ansible-lint==$2"
+    # UV_PYTHON pins the lint env to the pydex interpreter. Assert it rather
+    # than trust it: a uv or venv change that let a managed interpreter in
+    # would otherwise surface much later as the agent linting against a python
+    # other than $3, with nothing in the image to explain it.
+    # chr(46) is a dot, so the -c code carries no quotes of its own and this
+    # body can stay single-quoted.
+    got=$("$UV_TOOL_DIR/ansible-lint/bin/python" -c "import sys; print(*sys.version_info[:2], sep=chr(46))")
+    [ "$got" = "$3" ] || { echo "tool venv ansible-lint is on python $got, not $3" >&2; exit 1; }
+    # The agent imports ansible from the PATH python3, so prove the image can
+    # do that before it ships -- a wrong install target would otherwise surface
+    # as an unresolved import in the agent, with nothing in the build to explain
+    # it. The decoy directory is the point. Playbook checkouts are full of
+    # `ansible/` dirs, cwd is first on sys.path, and a directory with no
+    # __init__.py is a valid NAMESPACE package: a bare `import ansible` against
+    # one of those exits 0 and prints a __path__, so a test that only imported
+    # ansible would pass against a tree with nothing installed. Importing
+    # ansible.parsing.splitter is what gives it teeth -- no playbook layout has
+    # that submodule -- and the sibling jinja2/yaml imports fail the same way.
+    # $UV_PYTHON is the interpreter PATH resolves to at runtime; the -c code
+    # takes its argument from argv so this body needs no quoting.
+    mkdir -p /tmp/ansible-import-check/ansible/tasks
+    cd /tmp/ansible-import-check
+    "$UV_PYTHON" -c "import sys, ansible, jinja2, yaml; from ansible.parsing.splitter import split_args; print(ansible.__version__, jinja2.__version__, yaml.__version__, split_args(sys.argv[1]))" "a b  c"
+    cd /
+    rm -rf /home/opencode/.cache
+  ' buildah-ansible "${ANSIBLE_CORE_VERSION}" "${ANSIBLE_LINT_VERSION}" "${PYVER%.*}"
+  buildah run --volume "${CACHE}:/mnt/host_cache" "$container" -- bash -ec "
+    set -e
+    export ANSIBLE_GALAXY_CACHE_DIR=/mnt/host_cache/ansible_galaxy
+    mkdir -p \"\$ANSIBLE_GALAXY_CACHE_DIR\"
+    # -p is --collections-path here. ANSIBLE_COLLECTIONS_PATH is set in
+    # compose_server so the runtime resolves this same path. The binary sits
+    # beside the pydex python, not in .local/bin -- see the install run.
+    /opt/python-${PYVER}/bin/ansible-galaxy collection install \
+      -p /home/opencode/.ansible/collections \
+      'ansible.posix:${ANSIBLE_POSIX_VERSION}' \
+      'community.general:${ANSIBLE_COMMUNITY_GENERAL_VERSION}'
+  "
   buildah run "$container" -- bash -ec "
     set -e
-    mkdir -p /dev-layer/usr /dev-layer/etc /dev-layer/var
-    cp -a /usr/. /dev-layer/usr/
-    cp -a /etc/. /dev-layer/etc/
-    cp -a /var/. /dev-layer/var/
+    mkdir -p /ansible-layer/home/opencode
+    # ansible-core is installed into the pydex python, so its two writable trees
+    # have to travel with the payload: site-packages for the imports, bin for
+    # the ten CLI scripts. The finals already carry an identical /opt from
+    # pydex, so compose_server merges this over the top rather than replacing
+    # it -- staging the whole interpreter instead would triple the layer.
+    # Left root-owned on purpose, matching the /opt pydex already put there; the
+    # chown below is for the /home/opencode payload only.
+    mkdir -p /ansible-layer/opt/python-${PYVER}/lib/python${PYVER%.*}
+    cp -a /opt/python-${PYVER}/lib/python${PYVER%.*}/site-packages /ansible-layer/opt/python-${PYVER}/lib/python${PYVER%.*}/
+    cp -a /opt/python-${PYVER}/bin /ansible-layer/opt/python-${PYVER}/
+    # cp -a preserves ownership, so the staged payload is only uid-owned if it
+    # is chowned first -- including .ansible, which the root Galaxy run above
+    # created after the install run already finished.
+    chown -R opencode: /home/opencode/.local /home/opencode/.ansible
+    cp -a /home/opencode/.local /ansible-layer/home/opencode/
+    cp -a /home/opencode/.ansible /ansible-layer/home/opencode/
   "
-  buildah commit --rm "$container" "${DEVTOOLS_IMG}"
+  buildah commit --rm "$container" "${ANSIBLE_IMG}"
 }
 
 # ---------------------------------------------------------------------------
@@ -810,13 +1086,13 @@ compose_server() {
     error "No opencode config for API generation '${OPENCODE_API:-v1}': ${config_source}"
     exit 1
   fi
-  if [ "${stack}" = full ]; then
-    container=$(buildah from "${PYDEX_IMG}")
-    python_path_prefix="/opt/python-${PYVER}/bin:"
-  else
-    container=$(buildah from "${BASE_IMG}")
-    python_path_prefix=""
-  fi
+  # Both stacks build FROM pydex now, so there is exactly one Python in the
+  # image and it is pydex ${PYVER}. Debian's python3 still ships in the base
+  # layer (build_pydex needs it to bootstrap the sigstore venv) but nothing
+  # at runtime resolves to it: python_path_prefix puts /opt/python-${PYVER}/bin
+  # ahead of /usr/bin, and /usr/local/bin/python3 is a symlink to the same.
+  container=$(buildah from "${PYDEX_IMG}")
+  python_path_prefix="/opt/python-${PYVER}/bin:"
   ocbin_image=$(ocbin_for "$src")
 
   merge_payload "$container" "$ocbin_image" /usr/local/bin/opencode /usr/local/bin/opencode
@@ -826,11 +1102,26 @@ compose_server() {
   merge_payload "$container" "${GOBIN_IMG}" /usr/local/bin/gomplate /usr/local/bin/gomplate
   merge_payload "$container" "${GOBIN_IMG}" /usr/local/bin/hadolint /usr/local/bin/hadolint
   merge_payload "$container" "${MCP_IMG}" /home/opencode/.local /home/opencode/
-  # devtools: the target /usr,/etc,/var all exist, so the source needs the
-  # "/." contents-merge spelling (plain cp -a would nest usr/ inside usr/).
-  merge_payload "$container" "${DEVTOOLS_IMG}" /dev-layer/usr/. /usr/
-  merge_payload "$container" "${DEVTOOLS_IMG}" /dev-layer/etc/. /etc/
-  merge_payload "$container" "${DEVTOOLS_IMG}" /dev-layer/var/. /var/
+  # pylsp's interpreter trees, contents-merged over the identical /opt pydex
+  # already put here -- what makes jedi's default environment the pydex python
+  # for BOTH stacks (basic merges mcp too, just not pgassets/rusttools).
+  merge_payload "$container" "${MCP_IMG}" /mcp-layer/opt/. /opt
+  # ansible payload, staged the same way as the mcp layer above. Both stacks
+  # carry pydex now, so these venvs resolve and this is not full-only. Keeping
+  # it shared preserves what basic had when ansible came from the devtools
+  # apt list.
+  merge_payload "$container" "${ANSIBLE_IMG}" /ansible-layer/home/opencode/.local /home/opencode/
+  merge_payload "$container" "${ANSIBLE_IMG}" /ansible-layer/home/opencode/.ansible /home/opencode/
+  # ansible-core's own trees, over the identical /opt pydex already put here.
+  # Contents-merge for the same reason the devtools merges use "/.".
+  merge_payload "$container" "${ANSIBLE_IMG}" /ansible-layer/opt/. /opt
+  # devtools: apt installs into the layer's own rootfs, so these merge straight
+  # from the image. The "/." contents-merge spelling is still required -- the
+  # target /usr,/etc,/var all exist, and plain cp -a of a <dir>/ onto an
+  # existing <dir>/ would nest usr/ inside usr/.
+  merge_payload "$container" "${DEVTOOLS_IMG}" /usr/. /usr/
+  merge_payload "$container" "${DEVTOOLS_IMG}" /etc/. /etc/
+  merge_payload "$container" "${DEVTOOLS_IMG}" /var/. /var/
   if [ "${stack}" = full ]; then
     merge_payload "$container" "${PGA_IMG}" /pg-layer/usr/lib/postgresql /usr/lib/postgresql
     merge_payload "$container" "${PGA_IMG}" /pg-layer/usr/share/postgresql /usr/share/postgresql
@@ -842,7 +1133,14 @@ compose_server() {
   buildah config --env NPM_CONFIG_PREFIX=/home/opencode/.local "$container"
   buildah config --env UV_TOOL_DIR=/home/opencode/.local/share/uv/tools "$container"
   buildah config --env UV_TOOL_BIN_DIR=/home/opencode/.local/bin "$container"
-  buildah config --env PATH="${python_path_prefix}/home/opencode/.local/bin:/usr/local/bin:/usr/bin:/bin" "$container"
+  # /usr/sbin is in the list because dnscrypt-proxy lives there and the agent
+  # reaches it by name; the rest is Debian's default order, so nothing shadows
+  # differently than it would on a stock box.
+  buildah config --env PATH="${python_path_prefix}/home/opencode/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" "$container"
+  # baked in the ansible layer, but named explicitly so a playbook run does not
+  # depend on $HOME/.ansible defaulting the way the image user expects
+  buildah config --env ANSIBLE_COLLECTIONS_PATH=/home/opencode/.ansible/collections "$container"
+  buildah config --env ANSIBLE_HOME=/home/opencode/.ansible "$container"
 
   # the api config is the full-stack config; basic drops the lean_ctx entry.
   # v1 keeps it at mcp.lean_ctx, v2's native shape nests it at
@@ -896,6 +1194,10 @@ compose_server() {
 #
 # Description: assembles the slim attach-only opencode-tui image: tui-base +
 #   the ocbin binary, xdg state dirs, and opencode as entrypoint.
+#   The state-dir run below keeps --user opencode, unlike the payload installs
+#   in build_mcp/build_ansible: build_tui_base creates and chowns those dirs
+#   itself, so the mkdirs are no-ops and only the o+rwX widening matters, while
+#   running it as root would leave the TUI's state dirs root-owned.
 # Args:
 #   $1  src (string): "source" or "binary"
 #   $2  tail (string): "" (default variant) or a suffix for variant-distinct
@@ -942,9 +1244,11 @@ compose_tui() {
 # ---------------------------------------------------------------------------
 # ensure_all_layers(<stack>, <src>)
 #
-# Description: orders ensure() over every layer a variant needs. The cheap
-#   layers are shared by both stacks; the heavy three (pydex, rusttools,
-#   pgassets) only build when the stack is full.
+# Description: orders ensure() over every layer a variant needs. Everything
+#   except rusttools and pgassets is shared by both stacks; those two only build
+#   when the stack is full, which is now the whole full/basic difference.
+#   pydex is shared because it is the image's only Python and mcp + ansible
+#   both pin to it.
 # Args:
 #   $1  stack (string): "full" or "basic"
 #   $2  src (string): "source" or "binary"
@@ -956,11 +1260,15 @@ ensure_all_layers() {
   ensure base "${BASE_IMG}"
   ensure tui_base "${TUI_BASE_IMG}"
   ensure uvbin "${UVBIN_IMG}"
+  # pydex is shared, not full-only: it is the one Python the image is allowed to
+  # use, and both mcp and ansible pin their venvs to it. Ordering matters --
+  # pydex has to exist before the two layers that build FROM it.
+  ensure pydex "${PYDEX_IMG}"
   ensure gobin "${GOBIN_IMG}"
   ensure mcp "${MCP_IMG}"
+  ensure ansible "${ANSIBLE_IMG}"
   ensure devtools "${DEVTOOLS_IMG}"
   if [ "${stack}" = full ]; then
-    ensure pydex "${PYDEX_IMG}"
     ensure rusttools "${RUST_IMG}"
     ensure pgassets "${PGA_IMG}"
   fi
