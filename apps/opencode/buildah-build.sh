@@ -20,16 +20,25 @@
 #   ocbin-binary  <hash>            pinned upstream, sha256-verified release
 #   pgassets      <PGVER>           pgclient + pgvector (payload staging dir)
 #   rusttools     latest            lean-ctx built from crates.io
-#   yq            latest            yq from github.com/mikefarah/yq/v4 via go install
+#   gobin         latest            Go CLI tools (yq, gomplate) + hadolint release binary
 #   uvbin         latest            uv / uvx binaries on a scratch rootfs
 #   mcp           latest            MCP/LSP tools payload in /home/opencode/.local
+#   devtools      latest            agent validation/debug toolchain, staged in /dev-layer
 #
 # Variant  matrix (STACK x SRC) -> which layers final images pick:
 #   full + source   pydex + pgassets + rusttools + ocbin-source (default)
 #   full + binary   pydex + pgassets + rusttools + ocbin-binary
 #   basic + source  base                + ocbin-source (Debian python, slim)
 #   basic + binary  base                + ocbin-binary
-# Every variant also merges uvbin, yq and mcp. The tui image is tui-base + ocbin.
+# Every variant also merges uvbin, gobin, mcp and devtools. The tui image is
+# tui-base + ocbin (attach-only, so it deliberately gets none of them).
+#
+# Why devtools is a layer and not more build_base packages: `ensure` short-
+# circuits on image presence, and the full-stack finals are `buildah from
+# ${PYDEX_IMG}`, so anything appended to build_base only reaches them after
+# base AND pydex are both force-removed and rebuilt (pydex alone is ~2.4G).
+# A separate layer keeps the validation toolchain independent of that chain,
+# exactly like the old yq-only layer did.
 #
 # opencode.json is copied verbatim from build/opencode/opencode.jsonc
 # (the full-stack config); the basic stack drops the lean_ctx entry via jq.
@@ -43,7 +52,8 @@
 #   OPTIONAL  LATEST_VERSION, HOST_UID, HOST_GID (lib/cli.sh), STACK, SRC,
 #             TAIL, BUILD_JOBS (parallelism, default nproc),
 #             PYTHON_VERSION (default 3.14.7), PGVECTOR_VERSION (default 0.8.2),
-#             NO_PUSH=1 (commit locally without registry push)
+#             HADOLINT_VERSION (default v2.15.1), GOMPLATE_VERSION (default
+#             v5.2.0), NO_PUSH=1 (commit locally without registry push)
 #
 # ---------------------------------------------------------------------------
 # Notes
@@ -94,6 +104,8 @@ STAGE="${CACHE}/buildah_stage"            # scratch area for compose-time files
 
 PYVER="${PYTHON_VERSION:-3.14.7}"
 PGVER="${PGVECTOR_VERSION:-0.8.2}"
+HADOLINT_VERSION="${HADOLINT_VERSION:-v2.15.1}"
+GOMPLATE_VERSION="${GOMPLATE_VERSION:-v5.2.0}"
 BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
 
 : "${OPENCODE_TAG:=v${LATEST_VERSION:-1.18.31}}"
@@ -104,9 +116,10 @@ TUI_BASE_IMG="${NS}/tui-base:v1"
 PYDEX_IMG="${NS}/pydex:${PYVER}"
 PGA_IMG="${NS}/pgassets:${PGVER}"
 RUST_IMG="${NS}/rusttools:latest"
-YQ_IMG="${NS}/yq:latest"
+GOBIN_IMG="${NS}/gobin:latest"
 UVBIN_IMG="${NS}/uvbin:latest"
 MCP_IMG="${NS}/mcp:latest"
+DEVTOOLS_IMG="${NS}/devtools:latest"
 OC_SRC_IMG="${NS}/ocbin-source:${RESOLVED_HASH}"
 OC_BIN_IMG="${NS}/ocbin-binary:${RESOLVED_HASH}"
 SERVER_IMG="${NS}/opencode-server"
@@ -147,7 +160,6 @@ selinux_cache_guard() {
   esac
 }
 selinux_cache_guard
-
 
 # ---------------------------------------------------------------------------
 # img_exists(<image>)
@@ -539,19 +551,56 @@ build_rusttools() {
 }
 
 # ---------------------------------------------------------------------------
-# build_yq()
+# build_gobin()
 #
-# Description: installs the yq v4 binary from module proxy HEAD into
-#   /usr/local/bin via the official golang image. The go module + build
-#   caches live on the host bind-mount so repeat runs are incremental.
+# Description: the standalone CLI tools the image carries as single binaries.
+#   yq + gomplate are Go, installed from module-proxy into /usr/local/bin via
+#   the official golang image; the go module + build caches live on the host
+#   bind-mount so repeat runs are incremental. The gomplate major must track
+#   the `docker.io/hairyhenderson/gomplate` image the `just template` recipe
+#   renders with: /v5 is current, and /v4 silently pins v4.3.3. It is pinned
+#   exactly (not @latest) and stamped via -ldflags, because a go-installed
+#   binary otherwise reports "gomplate version 0.0.0" -- the goreleaser
+#   ldflags are not applied by `go install`, and the agent needs to be able to
+#   tell which gomplate it is validating with. The -ldflags value is therefore
+#   nested inside the `bash -ec "..."` argument, so its quotes MUST stay
+#   escaped (\"): the host shell strips unescaped ones, which silently turns
+#   the value into a second, @version-less package argument and fails the
+#   build with "go: go.mod file not found" rather than at the flag. `grep`ping
+#   the reported version back is what catches a stamp that silently dropped.
+#   hadolint is Haskell, not Go (its repo is a .cabal project, so `go install`
+#   cannot work), so it comes from the sha256-VERIFIED GitHub release,
+#   host-side, like the ocbin binary.
 # Globals:
 #   CACHE (string): host cache dir; go module/build caches at /mnt/host_cache/go
-#   YQ_IMG (string): image name committed when complete
+#   DL (string): host dir holding the hadolint release download
+#   HADOLINT_VERSION (string): hadolint release tag, default v2.15.1
+#   GOMPLATE_VERSION (string): gomplate release tag, default v5.2.0
+#   GOBIN_IMG (string): image name committed when complete
 # Outputs:
-#   Commits ${YQ_IMG} with /usr/local/bin/yq
+#   Commits ${GOBIN_IMG} with /usr/local/bin/{yq,gomplate,hadolint}
 # ---------------------------------------------------------------------------
-build_yq() {
-  local container
+build_gobin() {
+  local container hadolint_asset hadolint_dir
+  hadolint_asset="hadolint-linux-x86_64"
+  hadolint_dir="${DL}/hadolint-${HADOLINT_VERSION}"
+  mkdir -p "${hadolint_dir}"
+
+  if [ ! -x "${hadolint_dir}/hadolint" ]; then
+    info "==> Fetching ${hadolint_asset} ${HADOLINT_VERSION} (sha256 verified)..."
+    curl -fL --retry 3 -o "${hadolint_dir}/${hadolint_asset}" \
+      "https://github.com/hadolint/hadolint/releases/download/${HADOLINT_VERSION}/${hadolint_asset}"
+    curl -fL --retry 3 -o "${hadolint_dir}/checksums.sha256" \
+      "https://github.com/hadolint/hadolint/releases/download/${HADOLINT_VERSION}/checksums.sha256"
+    # the release publishes one checksums file for every platform asset, so
+    # verify just the line for ours (sha256sum -c on the whole file fails on
+    # the macos/windows entries we did not download).
+    (cd "${hadolint_dir}" &&
+      grep -F " *${hadolint_asset}" checksums.sha256 | sha256sum -c -)
+    cp "${hadolint_dir}/${hadolint_asset}" "${hadolint_dir}/hadolint"
+    chmod +x "${hadolint_dir}/hadolint"
+  fi
+
   container=$(buildah from docker.io/library/golang:latest)
   buildah config --env HOME=/root "$container"
   buildah config --env GOPATH=/mnt/host_cache/go "$container"
@@ -561,11 +610,15 @@ build_yq() {
     set -e
     export GOBIN=/usr/local/bin
     go install github.com/mikefarah/yq/v4@latest
+    go install -ldflags \"-X github.com/hairyhenderson/gomplate/v5/version.Version=${GOMPLATE_VERSION}\" \
+      github.com/hairyhenderson/gomplate/v5/cmd/gomplate@${GOMPLATE_VERSION}
     yq --version
+    gomplate --version | grep -q \"${GOMPLATE_VERSION}\"
   "
-  buildah commit --rm "$container" "${YQ_IMG}"
+  buildah copy "$container" "${hadolint_dir}/hadolint" /usr/local/bin/hadolint
+  buildah run "$container" -- chmod +x /usr/local/bin/hadolint
+  buildah commit --rm "$container" "${GOBIN_IMG}"
 }
-
 
 # ---------------------------------------------------------------------------
 # build_uvbin()
@@ -594,7 +647,9 @@ build_uvbin() {
 #   /home/opencode/.local (uv tools + global npm packages) as the opencode
 #   user; the whole .local tree is later merged into composed servers.
 #   Includes: semble[mcp], code-index-mcp, python-lsp-server, repomix,
-#   bash-language-server. Declares the uv tool/npm prefix env the tools need.
+#   bash-language-server, yaml-language-server, dockerfile-language-server,
+#   @ast-grep/cli, pyright, check-jsonschema. Declares the uv tool/npm prefix
+#   env the tools need.
 # Globals:
 #   CACHE (string): host cache dir; apt debs bound at /mnt/host_cache
 #   MCP_IMG (string): image name committed when complete
@@ -621,10 +676,57 @@ build_mcp() {
       --network-concurrency=8 \
       --fetch-retry-maxtimeout=300000 \
       --fetch-timeout=300000 \
-      repomix bash-language-server
+      repomix bash-language-server \
+      yaml-language-server dockerfile-language-server-nodejs \
+      @ast-grep/cli pyright
+    uv tool install "check-jsonschema"
     rm -rf /home/opencode/.npm /home/opencode/.cache
   '
   buildah commit --rm "$container" "${MCP_IMG}"
+}
+
+# ---------------------------------------------------------------------------
+# build_devtools()
+#
+# Description: the agent's validation/debug toolchain as its own layer, so it
+#   can be added to or changed without invalidating the base -> pydex chain.
+#   Go and Rust are NOT here: they arrive as layers already (the gobin layer
+#   for go, rustup in build_rusttools for lean-ctx).
+#   Everything apt scatters over the rootfs is staged into /dev-layer/{usr,etc,var}
+#   so compose_server can cherry-pick it with merge_payload.
+# Globals:
+#   CACHE (string): host cache dir; apt debs bound at /mnt/host_cache
+#   APTDROP (string): apt snippet pinning debs to the host cache
+#   DEVTOOLS_IMG (string): image name committed when complete
+# Outputs:
+#   Commits ${DEVTOOLS_IMG} with the /dev-layer payload staging tree
+# ---------------------------------------------------------------------------
+build_devtools() {
+  local container
+  container=$(buildah from "${BASE_IMG}")
+  buildah config --env DEBIAN_FRONTEND=noninteractive "$container"
+  buildah run --volume "${CACHE}:/mnt/host_cache" "$container" -- bash -ec "
+    set -e
+    mkdir -p /mnt/host_cache/apt_cache/partial
+    ${APTDROP}
+    apt-get update && apt-get install -y --no-install-recommends \
+      just \
+      yamllint ansible-core ansible-lint \
+      nftables dnscrypt-proxy \
+      iproute2 iputils-ping bind9-dnsutils netcat-openbsd traceroute \
+      procps psmisc lsof file tree strace \
+      skopeo gnupg unzip zstd rsync sqlite3
+  "
+  # ansible-core Depends python3-yaml + python3-jinja2, so the basic (Debian
+  # python3) stack picks those up from here rather than needing its own list.
+  buildah run "$container" -- bash -ec "
+    set -e
+    mkdir -p /dev-layer/usr /dev-layer/etc /dev-layer/var
+    cp -a /usr/. /dev-layer/usr/
+    cp -a /etc/. /dev-layer/etc/
+    cp -a /var/. /dev-layer/var/
+  "
+  buildah commit --rm "$container" "${DEVTOOLS_IMG}"
 }
 
 # ---------------------------------------------------------------------------
@@ -664,7 +766,7 @@ merge_payload() {
 #
 # Description: assembles the opencode-server image by picking layers per
 #   the variant. full picks pydex (python PATH prefix), pgassets, rusttools;
-#   basic starts from base. Both merge ocbin, uvbin, yq and the mcp payload,
+#   basic starts from base. Both merge ocbin, uvbin, gobin, mcp and devtools,
 #   bake the opencode.json (lean_ctx only for full), normalise /home/opencode
 #   ownership (chown HOST_UID:0, then chmod g=u), and set user/workdir/
 #   entrypoint before committing. tail controls the local tag: empty ->
@@ -698,8 +800,15 @@ compose_server() {
   merge_payload "$container" "$ocbin_image" /usr/local/bin/opencode /usr/local/bin/opencode
   merge_payload "$container" "${UVBIN_IMG}" /uv /bin/uv
   merge_payload "$container" "${UVBIN_IMG}" /uvx /bin/uvx
-  merge_payload "$container" "${YQ_IMG}" /usr/local/bin/yq /usr/local/bin/yq
+  merge_payload "$container" "${GOBIN_IMG}" /usr/local/bin/yq /usr/local/bin/yq
+  merge_payload "$container" "${GOBIN_IMG}" /usr/local/bin/gomplate /usr/local/bin/gomplate
+  merge_payload "$container" "${GOBIN_IMG}" /usr/local/bin/hadolint /usr/local/bin/hadolint
   merge_payload "$container" "${MCP_IMG}" /home/opencode/.local /home/opencode/
+  # devtools: the target /usr,/etc,/var all exist, so the source needs the
+  # "/." contents-merge spelling (plain cp -a would nest usr/ inside usr/).
+  merge_payload "$container" "${DEVTOOLS_IMG}" /dev-layer/usr/. /usr/
+  merge_payload "$container" "${DEVTOOLS_IMG}" /dev-layer/etc/. /etc/
+  merge_payload "$container" "${DEVTOOLS_IMG}" /dev-layer/var/. /var/
   if [ "${stack}" = full ]; then
     merge_payload "$container" "${PGA_IMG}" /pg-layer/usr/lib/postgresql /usr/lib/postgresql
     merge_payload "$container" "${PGA_IMG}" /pg-layer/usr/share/postgresql /usr/share/postgresql
@@ -722,7 +831,7 @@ compose_server() {
   fi
   buildah run "$container" -- bash -ec "
     mkdir -p /home/opencode/.local/share/opencode /home/opencode/.local/state/opencode \
-      /home/opencode/.cache/opencode /home/opencode/.npm
+      /home/opencode/.cache/opencode /home/opencode/.config/opencode /home/opencode/.npm
     chown -R ${HOST_UID}:0 /home/opencode
     chmod -R g=u /home/opencode
     # uid-agnostic runtime state: the fortress may run the container with
@@ -735,6 +844,12 @@ compose_server() {
     chmod -R o+rwX /home/opencode/.local/share/opencode /home/opencode/.local/state/opencode \
       /home/opencode/.cache/opencode /home/opencode/.config/opencode /home/opencode/workspace \
       /home/opencode/.npm
+    # ...and the XDG roots themselves must be writable, not just their
+    # children: .local/.config/.cache land root-owned from the layer merges
+    # and MCP servers (lean-ctx among them) mkdir their OWN state dir under
+    # .local/share on first run, which is EACCES without this.
+    chmod o+rwx /home/opencode/.local /home/opencode/.local/share \
+      /home/opencode/.config /home/opencode/.cache
   "
   buildah config --user opencode "$container"
   buildah config --workingdir /home/opencode/workspace "$container"
@@ -776,11 +891,13 @@ compose_tui() {
   buildah run --user opencode "$container" -- bash -ec '
     mkdir -p /home/opencode/workspace /home/opencode/.cache/opencode \
       /home/opencode/.local/share/opencode /home/opencode/.local/state/opencode \
-      /home/opencode/.npm
+      /home/opencode/.config/opencode /home/opencode/.npm
     chmod -R o+X /home/opencode
     chmod -R o+rwX /home/opencode/workspace /home/opencode/.cache/opencode \
       /home/opencode/.local/share/opencode /home/opencode/.local/state/opencode \
-      /home/opencode/.npm
+      /home/opencode/.config/opencode /home/opencode/.npm
+    chmod o+rwx /home/opencode/.local /home/opencode/.local/share \
+      /home/opencode/.config /home/opencode/.cache
   '
   buildah config --user opencode "$container"
   buildah config --workingdir /home/opencode/workspace "$container"
@@ -813,8 +930,9 @@ ensure_all_layers() {
   ensure base "${BASE_IMG}"
   ensure tui_base "${TUI_BASE_IMG}"
   ensure uvbin "${UVBIN_IMG}"
-  ensure yq "${YQ_IMG}"
+  ensure gobin "${GOBIN_IMG}"
   ensure mcp "${MCP_IMG}"
+  ensure devtools "${DEVTOOLS_IMG}"
   if [ "${stack}" = full ]; then
     ensure pydex "${PYDEX_IMG}"
     ensure rusttools "${RUST_IMG}"
