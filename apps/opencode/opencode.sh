@@ -84,15 +84,20 @@ resolve_version() {
 #
 # Description: normalises a publish variant name into the exported
 #   STACK/SRC/TAIL dimensions and a default OPENCODE_TAG for binary builds.
+#   It also resolves OPENCODE_API, which is orthogonal to the variant name:
+#   the API generation picks the v1/v2 config, SELinux policy and launcher
+#   wiring, not a different build. v1 is the default and the only fully
+#   wired generation; v2 exists as a reachable seam.
 # Args:
 #   $1  variant_name (string): "" | full | binary | full-binary | basic |
 #       basic-binary
 # Globals:
-#   OPENCODE_TAG (string): set to v1.18.31 for binary variants when unset
+#   OPENCODE_TAG (string): set to v1.18.33 for binary variants when unset
+#   OPENCODE_API (string): set to v1 when unset
 # Outputs:
-#   Exports STACK, SRC, TAIL and OPENCODE_TAG
+#   Exports STACK, SRC, TAIL, OPENCODE_TAG and OPENCODE_API
 # Returns:
-#   Exits 1 on unknown variant names
+#   Exits 1 on unknown variant names or unknown OPENCODE_API values
 # ---------------------------------------------------------------------------
 set_variant() {
   case "${1:-}" in
@@ -105,7 +110,7 @@ set_variant() {
       STACK="full"
       SRC="binary"
       TAIL="full-binary"
-      OPENCODE_TAG="${OPENCODE_TAG:-v1.18.31}"
+      OPENCODE_TAG="${OPENCODE_TAG:-v1.18.33}"
       ;;
     basic)
       STACK="basic"
@@ -116,15 +121,25 @@ set_variant() {
       STACK="basic"
       SRC="binary"
       TAIL="basic-binary"
-      OPENCODE_TAG="${OPENCODE_TAG:-v1.18.31}"
+      OPENCODE_TAG="${OPENCODE_TAG:-v1.18.33}"
       ;;
     *)
       error "Error: Unknown publish variant '$1' (expected full, full-binary, basic, basic-binary)."
       exit 1
       ;;
   esac
-  export STACK SRC TAIL OPENCODE_TAG
-  info "==> Variant: stack=${STACK} src=${SRC} tail=${TAIL:-latest}"
+
+  OPENCODE_API="${OPENCODE_API:-v1}"
+  case "${OPENCODE_API}" in
+    v1 | v2) ;;
+    *)
+      error "Error: Unknown OPENCODE_API '${OPENCODE_API}' (expected v1 or v2)."
+      exit 1
+      ;;
+  esac
+
+  export STACK SRC TAIL OPENCODE_TAG OPENCODE_API
+  info "==> Variant: stack=${STACK} src=${SRC} api=${OPENCODE_API} tail=${TAIL:-latest}"
 }
 
 
