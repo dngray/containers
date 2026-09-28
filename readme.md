@@ -22,6 +22,25 @@ Scripts locate the repo themselves (`REPO_ROOT`) — no env var needed. The only
 thing installed on the host is `~/.local/bin/code-fortress`, symlinked into this
 repo; it injects `bin/` onto PATH so `ai-secure` resolves inside the fortress.
 
+### Launching a fortress
+
+```
+code-fortress <path> [aider|opencode|goose] [latest|full-binary|basic-binary] [v1|v2]
+```
+
+The last three are optional; `opencode`, `latest` and `v1` are the defaults, so
+the common case is just `code-fortress . opencode latest`. The variant is
+opencode-only, and the API generation is a separate axis that selects the
+config, the SELinux policy and the launcher wiring — it does not change the
+image variant. Both can also come from the environment (`OPENCODE_VARIANT`,
+`OPENCODE_API`), with the argument taking precedence.
+
+`v2` is wired through the build and the policy but **has no image yet** — there
+is nothing published to run, so `code-fortress` refuses it rather than starting
+a seat that cannot come up. That refusal is the one place the generation is
+enforced, and it is deliberately early: it happens before the pod is created
+and before credentials are fetched.
+
 ## Fortress DB access
 
 Per-project Postgres credentials, if the agent should reach a database. Create

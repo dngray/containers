@@ -34,12 +34,15 @@ export POD_NAME="ai-fortress-pod-$PROJECT_ID"
 MODE=${2:-"opencode"}
 # OpenCode-only image variant (tag suffix): latest | full-binary | basic-binary
 VARIANT=${3:-"latest"}
+# OpenCode-only API generation: v1 | v2. Orthogonal to the variant, and the
+# arg wins over the env var. v2 is plumbed but has no built image yet.
+API=${4:-"${OPENCODE_API:-v1}"}
 
 # Validate operation mode immediately to fail fast
 case "$MODE" in
 "aider" | "opencode" | "goose") ;;
 *)
-  echo "❌ Usage: code-fortress <path> [aider|opencode|goose] [latest|full-binary|basic-binary]"
+  echo "❌ Usage: code-fortress <path> [aider|opencode|goose] [latest|full-binary|basic-binary] [v1|v2]"
   exit 1
   ;;
 esac
@@ -48,7 +51,16 @@ esac
 case "$VARIANT" in
 "latest" | "full-binary" | "basic-binary") ;;
 *)
-  echo "❌ Usage: code-fortress <path> [aider|opencode|goose] [latest|full-binary|basic-binary]"
+  echo "❌ Usage: code-fortress <path> [aider|opencode|goose] [latest|full-binary|basic-binary] [v1|v2]"
+  exit 1
+  ;;
+esac
+
+# Validate the API generation; only opencode honours it today
+case "$API" in
+"v1" | "v2") ;;
+*)
+  echo "❌ Usage: code-fortress <path> [aider|opencode|goose] [latest|full-binary|basic-binary] [v1|v2]"
   exit 1
   ;;
 esac
@@ -56,6 +68,20 @@ esac
 if [ "$MODE" != "opencode" ] && [ "$VARIANT" != "latest" ]; then
   echo "⚠️  Image variant '$VARIANT' only applies to opencode mode; ignoring."
   VARIANT="latest"
+fi
+
+if [ "$MODE" != "opencode" ] && [ "$API" != "v1" ]; then
+  echo "⚠️  API generation '$API' only applies to opencode mode; ignoring."
+  API="v1"
+fi
+
+# v2 is wired through the build, config and SELinux policy, but no v2 image has
+# been built, so there is nothing to launch. Refuse here -- before the pod is
+# created and the secrets are fetched -- so the failure is a message rather
+# than a broken seat.
+if [ "$API" = "v2" ]; then
+  echo "❌ Opencode API 'v2' is not available yet. Use v1."
+  exit 1
 fi
 
 # 2. Strict Context-Aware Cleanup
@@ -92,6 +118,7 @@ OPENAI_API_KEY=$(gopass show ai/openai-api-key) || exit 1
 ANTHROPIC_API_KEY=$(gopass show ai/anthropic-api-key) || exit 1
 export OPENCODE_SERVER_PASSWORD OPENROUTER_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY
 export OPENCODE_VARIANT="$VARIANT"
+export OPENCODE_API="$API"
 
 export GOGOOSE_MODE="${GOOSE_MODE:-nanogpt}"
 
