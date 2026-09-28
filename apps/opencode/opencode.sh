@@ -271,7 +271,7 @@ clean)
   readarray -t oc_source_ids < <(podman images -q "${REG_URL}/library/opencode/ocbin-source")
   readarray -t oc_binary_ids < <(podman images -q "${REG_URL}/library/opencode/ocbin-binary")
   podman rmi "${server_ids[@]:-}" "${tui_ids[@]:-}" "${oc_source_ids[@]:-}" "${oc_binary_ids[@]:-}" 2>/dev/null || true
-  ok "✔ Opencode dismantling cycle completed safely. Layer images (base/pydex/pg/rust/uv/mcp) left in place."
+  ok "✔ Opencode dismantling cycle completed safely. Layer images (base/pydex/pg/rust/uv/gobin/mcp/devtools) left in place."
   ;;
 
 *)
