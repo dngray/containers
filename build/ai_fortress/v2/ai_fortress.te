@@ -1,0 +1,147 @@
+policy_module(ai_fortress, 1.0)
+
+# This policy carries a consolidated hardening pass. Where a tightening was
+# considered and REJECTED, the "KEPT deliberately" / "intentionally NOT used"
+# note beside it states why. Do not strip those permissions blind.
+
+gen_require(`
+    type container_runtime_t;
+    type container_file_t;
+    type sysfs_t;
+    type tmpfs_t;
+    type node_t;
+    class process2 nnp_transition;
+')
+
+########################################
+# Declarations
+########################################
+type fortress_agent_t;
+domain_type(fortress_agent_t)
+
+type fortress_src_t;
+files_type(fortress_src_t)
+
+type fortress_cache_t;
+files_type(fortress_cache_t)
+
+type fortress_config_t;
+files_type(fortress_config_t)
+
+type fortress_port_t;
+corenet_port(fortress_port_t)
+
+# Automatically label new files with the correct type at runtime
+type_transition fortress_agent_t fortress_src_t:dir fortress_src_t;
+type_transition fortress_agent_t fortress_cache_t:dir fortress_cache_t;
+type_transition fortress_agent_t fortress_config_t:dir fortress_config_t;
+
+# Managed domain transition from Podman/crun
+allow container_runtime_t fortress_agent_t:process { transition dyntransition siginh rlimitinh noatsecure getcap getattr getsched share };
+virt_sandbox_domain(fortress_agent_t)
+
+# Allows crun to shift domains when no-new-privileges is active
+allow container_runtime_t fortress_agent_t:process2 { nnp_transition };
+
+########################################
+# Network
+########################################
+# execmem KEPT deliberately: the CPython 3.14 JIT executes from writable memory;
+# removing it was considered and breaks JIT at serve time.
+allow fortress_agent_t self:process { execmem fork signal_perms setsched };
+# shm { ... map } intentionally NOT used: `map` is not a valid class-shm perm
+# in the targeted policy (build fails); execmem + tmpfs file map cover mmap.
+allow fortress_agent_t self:shm { create destroy read write };
+
+# TCP/UDP for server and client
+allow fortress_agent_t self: { tcp_socket udp_socket } { create_stream_socket_perms connect getattr setattr read write };
+allow fortress_agent_t self:tcp_socket { listen accept };
+
+# Bind for the OpenCode server, Connect for the TUI Client
+allow fortress_agent_t fortress_port_t:tcp_socket { name_bind name_connect };
+
+sysnet_dns_name_resolve(fortress_agent_t)
+corenet_tcp_connect_http_port(fortress_agent_t)
+corenet_tcp_connect_postgresql_port(fortress_agent_t)
+
+# Listener requires node_bind on node_t: this host labels 127.0.0.0/8 (and all
+# other addresses) as node_t, so any in-pod TCP listener — including the
+# loopback 127.0.0.1:4096 the server binds — needs node_bind. There is no
+# distinct loopback nodecon to narrow this any further. Listen-side hardening
+# instead comes from the name_bind scoping (fortress_port_t only, so no
+# arbitrary-port listeners). UDP node_bind likewise restored: the seat's DNS
+# resolver is reached over a UDP client socket (systemd-resolved on
+# 127.0.0.53:53), whose implicit source-port bind requires node_bind — without
+# it, uv/pip installs fail with DNS/Permission-denied (os error 13).
+allow fortress_agent_t node_t:tcp_socket node_bind;
+allow fortress_agent_t node_t:udp_socket node_bind;
+
+########################################
+# Internal Container File System Execution
+########################################
+# Read and execute container image files
+allow fortress_agent_t container_file_t:dir { list_dir_perms read open getattr search };
+allow fortress_agent_t container_file_t:file { read_file_perms execute map open getattr };
+allow fortress_agent_t container_file_t:lnk_file { read getattr };
+corecmd_exec_bin(fortress_agent_t)
+corecmd_exec_shell(fortress_agent_t)
+
+########################################
+# Data Access
+########################################
+
+# Workspace source files
+allow fortress_agent_t fortress_src_t:dir { manage_dir_perms relabelfrom relabelto };
+allow fortress_agent_t fortress_src_t:file { manage_file_perms relabelfrom relabelto map ioctl };
+allow fortress_agent_t fortress_src_t:lnk_file { manage_lnk_file_perms relabelfrom relabelto };
+
+# Needed so uv can execute compiled wheels/binaries inside persistent cache folder
+allow fortress_agent_t fortress_cache_t:dir { manage_dir_perms relabelfrom relabelto };
+allow fortress_agent_t fortress_cache_t:file { manage_file_perms relabelfrom relabelto map ioctl execute };
+allow fortress_agent_t fortress_cache_t:lnk_file { manage_lnk_file_perms };
+
+# Fortress config persistence — read/write with map for mmap-based tools
+allow fortress_agent_t fortress_config_t:dir manage_dir_perms;
+allow fortress_agent_t fortress_config_t:file { manage_file_perms map ioctl };
+
+# Common safe ioctls (TCGETS, FIONCLEX, FIOCLEX, TIOCGWINSZ) for Secureblue ioctl filtering
+allowxperm fortress_agent_t {
+    fortress_src_t
+    fortress_cache_t
+    fortress_config_t
+}:file ioctl { 0x5401 0x5450 0x5451 0x5413 };
+
+# Required for 'keep-id' and mapping
+allow fortress_agent_t self:cap_userns { fowner chown fsetid };
+
+# Transient symlinks for virtual environments
+allow fortress_agent_t self:lnk_file manage_lnk_file_perms;
+
+########################################
+# Standard Infrastructure & Kernel Lookups
+########################################
+userdom_use_user_terminals(fortress_agent_t)
+
+# sysfs dev reads and /proc symlink reads stay dropped (no AVCs fired for
+# them across the workload). cgroup + system-state reads were restored on
+# AVC evidence: the runtime (node/opencode/memory-guard) reads cgroup2
+# cpu/memory limits and /proc/version + /proc/meminfo at boot.
+fs_read_cgroup_files(fortress_agent_t)
+kernel_read_system_state(fortress_agent_t)
+
+# Handle the .local tmpfs mount (map + execute for pip3)
+fs_manage_tmpfs_dirs(fortress_agent_t)
+fs_manage_tmpfs_files(fortress_agent_t)
+# tmpfs execute KEPT deliberately: pip3 runs its .local payload off this tmpfs
+# mount; removing it was considered and breaks package installs.
+allow fortress_agent_t tmpfs_t:file { execute execute_no_trans map };
+
+allow fortress_agent_t self:fifo_file manage_fifo_file_perms;
+allow fortress_agent_t self:unix_stream_socket create_stream_socket_perms;
+
+# FIFO to the container runtime KEPT deliberately: podman attach/logs routes
+# opencode's stdio through container_runtime_t pipes; removing this rule denies
+# read/write at seat start (server fails to boot). The specific `fd use` on
+# container_runtime_t was dropped, but the boolean-gated `domain_fd_use` rule
+# still permits fd passing until that boolean is disabled.
+allow fortress_agent_t container_runtime_t:fifo_file { read write append getattr ioctl };
