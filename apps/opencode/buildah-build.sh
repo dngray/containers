@@ -40,8 +40,25 @@
 # A separate layer keeps the validation toolchain independent of that chain,
 # exactly like the old yq-only layer did.
 #
-# opencode.json is copied verbatim from build/opencode/opencode.jsonc
+# opencode.json is copied verbatim from build/opencode/config/<api>/opencode.jsonc
 # (the full-stack config); the basic stack drops the lean_ctx entry via jq.
+# OPENCODE_API picks the file: v2 discovers opencode.json/.jsonc in the same
+# global config dir and keeps `lsp` as-is, so v2's copy is currently identical
+# to v1's; only the mcp server map is destined to move under `mcp.servers`.
+#
+# OPENCODE_API (v1 | v2, default v1) is a third, orthogonal dimension: the
+# STACK x SRC matrix above picks the layer set, while OPENCODE_API picks the
+# API generation's config, SELinux policy and launcher wiring. It is
+# deliberately NOT part of the variant name, so the image set stays the same
+# for both generations and the variant selector is unchanged -- code-fortress
+# carries it as its own trailing [v1|v2] argument instead, defaulting to v1.
+#
+# config_source() reads it to pick build/opencode/config/$OPENCODE_API, and the
+# fortress SELinux policy is versioned the same way. v2 has no image yet, so
+# nothing here builds one: generation only selects among pre-existing inputs,
+# and the launcher refuses v2 until a v2 image exists. Note that the image tag
+# does not encode the generation -- as upstream does, the version tag carries
+# it (1.18.33 is v1, 2.0.18 is v2) and :latest is a single mutable pointer.
 #
 # ---------------------------------------------------------------------------
 # Environment (set by apps/opencode/opencode.sh or lib/cli.sh)
@@ -50,7 +67,8 @@
 #   REQUIRED  RESOLVED_HASH 7-char tag hash that tags/shames ocbin layers
 #   REQUIRED  OPENCODE_TAG  git tag / release tag, default v${LATEST_VERSION}
 #   OPTIONAL  LATEST_VERSION, HOST_UID, HOST_GID (lib/cli.sh), STACK, SRC,
-#             TAIL, BUILD_JOBS (parallelism, default nproc),
+#             TAIL, OPENCODE_API (v1 | v2, default v1), BUILD_JOBS (parallelism,
+#             default nproc),
 #             PYTHON_VERSION (default 3.14.7), PGVECTOR_VERSION (default 0.8.2),
 #             HADOLINT_VERSION (default v2.15.1), GOMPLATE_VERSION (default
 #             v5.2.0), NO_PUSH=1 (commit locally without registry push)
@@ -108,7 +126,7 @@ HADOLINT_VERSION="${HADOLINT_VERSION:-v2.15.1}"
 GOMPLATE_VERSION="${GOMPLATE_VERSION:-v5.2.0}"
 BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
 
-: "${OPENCODE_TAG:=v${LATEST_VERSION:-1.18.31}}"
+: "${OPENCODE_TAG:=v${LATEST_VERSION:-1.18.33}}"
 : "${RESOLVED_HASH:?resolve_version must run first}"
 
 BASE_IMG="${NS}/base:v1"
@@ -409,7 +427,7 @@ build_ocbin_source() {
     cp -r /mnt/host_cache/opencode_src/repo/. /src/opencode/
     cd /src/opencode
     bun install --backend=copyfile --ignore-scripts --network-concurrency=1
-    export OPENCODE_VERSION=\"${LATEST_VERSION:-1.18.31}\"
+    export OPENCODE_VERSION=\"${LATEST_VERSION:-1.18.33}\"
     export OPENCODE_CHANNEL=prod
     export HUSKY=0
     export BUN_CONFIG_MAX_WORKERS=${BUILD_JOBS}
@@ -787,7 +805,11 @@ merge_payload() {
 # ---------------------------------------------------------------------------
 compose_server() {
   local stack="$1" src="$2" tail="$3" container ocbin_image python_path_prefix config_source
-  config_source="${REPO_ROOT}/build/opencode/opencode.jsonc"
+  config_source="${REPO_ROOT}/build/opencode/config/${OPENCODE_API:-v1}/opencode.jsonc"
+  if [ ! -f "${config_source}" ]; then
+    error "No opencode config for API generation '${OPENCODE_API:-v1}': ${config_source}"
+    exit 1
+  fi
   if [ "${stack}" = full ]; then
     container=$(buildah from "${PYDEX_IMG}")
     python_path_prefix="/opt/python-${PYVER}/bin:"
@@ -822,11 +844,15 @@ compose_server() {
   buildah config --env UV_TOOL_BIN_DIR=/home/opencode/.local/bin "$container"
   buildah config --env PATH="${python_path_prefix}/home/opencode/.local/bin:/usr/local/bin:/usr/bin:/bin" "$container"
 
-  # opencode.jsonc is the full-stack config; basic drops the lean_ctx entry
+  # the api config is the full-stack config; basic drops the lean_ctx entry.
+  # v1 keeps it at mcp.lean_ctx, v2's native shape nests it at
+  # mcp.servers.lean_ctx -- delete both so the basic stack cannot silently
+  # start shipping lean_ctx when the v2 config is rewritten in its own shape.
   if [ "${stack}" = full ]; then
     buildah copy "$container" "${config_source}" /home/opencode/.config/opencode/opencode.json
   else
-    jq 'del(.mcp.lean_ctx)' "${config_source}" >"${STAGE}/opencode-basic.json"
+    jq 'del(.mcp.lean_ctx) | (if .mcp.servers then del(.mcp.servers.lean_ctx) else . end)' \
+      "${config_source}" >"${STAGE}/opencode-basic.json"
     buildah copy "$container" "${STAGE}/opencode-basic.json" /home/opencode/.config/opencode/opencode.json
   fi
   buildah run "$container" -- bash -ec "

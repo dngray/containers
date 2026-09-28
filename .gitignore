@@ -2,8 +2,9 @@ build/aerc-ui/nvim-linux-x86_64.deb
 build/aerc/container_aerc.cil
 build/aerc/nvim-linux-x86_64.deb
 build/aerc/rpm
-build/ai_fortress/ai_fortress.cil
-build/ai_fortress/rpm
+build/ai_fortress/*/ai_fortress.cil
+build/ai_fortress/*/ai_fortress.cil.orig
+build/ai_fortress/*/rpm
 build/neovim/nvim-linux-x86_64.deb
 build/opencode/cache
 build/opencode/roots.pem
