@@ -92,7 +92,22 @@ corecmd_exec_shell(fortress_agent_t)
 
 # Workspace source files
 allow fortress_agent_t fortress_src_t:dir { manage_dir_perms relabelfrom relabelto };
-allow fortress_agent_t fortress_src_t:file { manage_file_perms relabelfrom relabelto map ioctl };
+# `execute` restored deliberately. Removed by 5164aa9 ("tighten policy"), whose
+# stated intent was to stop a hostile seat agent running planted ELF binaries
+# straight out of the workspace tree. Reversed on 2026-09-30: a seat agent is
+# expected to install and run tooling with uv, and `uv venv` / `uv sync` place
+# the environment INSIDE the project, so `.venv/bin/*` console scripts
+# (pytest, ruff, black) land under fortress_src_t and `uv run <tool>` cannot
+# exec them. uv's own cache (~/.cache/uv -> fortress_cache_t) and ~/.local
+# (container_file_t) were already executable, so this rule was the odd one out.
+#
+# RESIDUAL RISK, accepted knowingly: 5164aa9's control was bypassable anyway.
+# manage_file_perms here, plus execute on fortress_cache_t:file and tmpfs_t:file,
+# lets a hostile seat stage a payload under ~/.cache/fortress or a tmpfs mount
+# and exec it there. So this raises the cost of running a planted binary rather
+# than preventing it. Narrowing the cache/tmpfs execute perms -- not this rule
+# -- is the change that would actually close that path.
+allow fortress_agent_t fortress_src_t:file { manage_file_perms relabelfrom relabelto map ioctl execute };
 allow fortress_agent_t fortress_src_t:lnk_file { manage_lnk_file_perms relabelfrom relabelto };
 
 # Needed so uv can execute compiled wheels/binaries inside persistent cache folder
