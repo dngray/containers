@@ -10,6 +10,14 @@
 # Set a safety boundary to alert you before your mid-workflow API token requests fail
 LOW_BALANCE_THRESHOLD=5.00
 
+# Refresh cadence for the HUD.
+#
+# This is deliberately repeated on the parse-error path below: `continue` skips
+# the sleep at the tail of the loop, so a persistent failure used to spin as fast
+# as curl could round-trip (~5 req/s) and redraw the pane faster than zellij
+# could render it -- which made the counter look absent rather than erroring.
+REFRESH_SECONDS=1200
+
 API_KEY=$(gopass show ai/openrouter-api-key) || {
   echo -e "💰 \033[1;31mOpenRouter: [Secret Store Unreadable]\033[0m"
   exit 1
@@ -21,6 +29,8 @@ while true; do
 
   # 1. Fetch raw accounting payload from the official credits endpoint
   RAW_JSON=$(curl -s \
+    --max-time 15 \
+    --connect-timeout 5 \
     -H "Authorization: Bearer $API_KEY" \
     -H "Accept: application/json" \
     https://openrouter.ai/api/v1/credits)
@@ -33,6 +43,8 @@ while true; do
   # 3. Present the result, distinguishing parse failure from a low balance
   if [ -z "$BAL" ]; then
     echo -e "💰 \033[1;31mOpenRouter: [API Parse Error]\033[0m"
+    # Must throttle here too: `continue` below bypasses the loop-tail sleep.
+    sleep "$REFRESH_SECONDS"
     continue
   fi
 
@@ -50,6 +62,7 @@ while true; do
     echo -e "💰 OpenRouter: \033[1;32m\$$BAL_FORMATTED\033[0m"
   fi
 
-  # Sleep for 5 minutes (300 seconds) to prevent hitting OpenRouter's baseline rate limits
-  sleep 300
+  # Sleep for 20 minutes (1200 seconds) to stay well inside OpenRouter's
+  # baseline rate limits.
+  sleep "$REFRESH_SECONDS"
 done
