@@ -877,7 +877,8 @@ build_devtools() {
       dnscrypt-proxy \
       iproute2 iputils-ping bind9-dnsutils netcat-openbsd traceroute \
       procps psmisc lsof file tree strace \
-      skopeo gnupg unzip zstd rsync sqlite3
+      skopeo gnupg unzip zstd rsync sqlite3 \
+      cpio initramfs-tools-core cryptsetup-bin
   "
   buildah commit --rm "$container" "${DEVTOOLS_IMG}"
 }
