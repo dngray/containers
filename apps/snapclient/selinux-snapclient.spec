@@ -37,5 +37,5 @@ fi
 %{_datadir}/selinux/packages/%{modulename}.cil
 
 %changelog
-* Sat May 28 2026 Daniel Gray <dngray@polarbear.army> - 1.0-1
+* Thu May 28 2026 Daniel Gray <dngray@polarbear.army> - 1.0-1
 - Initial policy module for snapclient container domain
