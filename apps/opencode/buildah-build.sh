@@ -73,8 +73,9 @@
 # STACK x SRC matrix above picks the layer set, while OPENCODE_API picks the
 # API generation's config, SELinux policy and launcher wiring. It is
 # deliberately NOT part of the variant name, so the image set stays the same
-# for both generations and the variant selector is unchanged -- code-fortress
-# carries it as its own trailing [v1|v2] argument instead, defaulting to v1.
+# for both generations and the variant selector is unchanged -- the fortress
+# launcher carries it as its own trailing [v1|v2] argument instead, defaulting
+# to v1.
 #
 # config_source() reads it to pick build/opencode/config/$OPENCODE_API, and the
 # fortress SELinux policy is versioned the same way. v2 has no image yet, so
@@ -105,8 +106,8 @@
 #     build-time `container_t` domain can manage them (see selinux_cache_guard
 #     below). The fortress policy labels $HOME/{src,workspace} as fortress_src_t,
 #     so under Enforcing the build cache needs an fcontext exception; the runtime
-#     label comes from the ai_fortress policy
-#     (`--security-opt label=type:fortress_agent_t` in bin/ai-secure).
+#     label comes from the selinux-fortress policy
+#     (`--security-opt label=type:fortress_agent_t` in apps/fortress/fortress-exec).
 #
 # Subcommands: layers | server | tui | build
 
@@ -219,13 +220,13 @@ selinux_cache_guard() {
   [ "$(getenforce 2>/dev/null || echo Disabled)" = Enforcing ] || return 0
   cache_label=$(stat -c '%C' "${CACHE}" 2>/dev/null || true)
   case "${cache_label}" in
-    *fortress_src_t*)
-      error "SELinux: ${CACHE} is labeled fortress_src_t, which container_t (the build domain) cannot access."
-      item "Relabel the build cache as container_file_t, then re-run:"
-      info "  sudo semanage fcontext -a -t container_file_t '${REPO_ROOT}/build/opencode/cache(/.*)?'"
-      info "  sudo restorecon -RFv ${REPO_ROOT}/build/opencode/cache"
-      exit 1
-      ;;
+  *fortress_src_t*)
+    error "SELinux: ${CACHE} is labeled fortress_src_t, which container_t (the build domain) cannot access."
+    item "Relabel the build cache as container_file_t, then re-run:"
+    info "  sudo semanage fcontext -a -t container_file_t '${REPO_ROOT}/build/opencode/cache(/.*)?'"
+    info "  sudo restorecon -RFv ${REPO_ROOT}/build/opencode/cache"
+    exit 1
+    ;;
   esac
 }
 selinux_cache_guard

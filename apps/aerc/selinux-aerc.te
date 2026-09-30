@@ -1,4 +1,4 @@
-policy_module(container_aerc, 1.0.0)
+policy_module(selinux-aerc, 1.0.0)
 
 gen_require(`
     type container_runtime_t;

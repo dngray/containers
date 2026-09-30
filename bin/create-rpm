@@ -31,6 +31,24 @@ for src in "$@"; do
   cp "${src}" "${BUILD_DIR}/SOURCES/"
 done
 
-info "==> Building RPM..."
+# rpmbuild %prep cds into %{_builddir} before running. A relative _topdir would
+# make %{_sourcedir} relative too, and the spec's "cp %{_sourcedir}/x.cil ."
+# would then resolve against the build dir instead of the topdir. Resolve
+# everything against the invocation cwd while we still know it.
+BUILD_DIR=$(CDPATH= cd "${BUILD_DIR}" && pwd)
+
+# Fail here with a clear message rather than letting %prep fail on a missing
+# source: rpmbuild's "cp: cannot stat" gives no hint that create-rpm staged it.
+staged=0
+for src in "$@"; do
+  base=$(basename "${src}")
+  if [ ! -f "${BUILD_DIR}/SOURCES/${base}" ]; then
+    error "create-rpm: '${src}' was not staged into SOURCES."
+    exit 1
+  fi
+  staged=$((staged + 1))
+done
+
+info "==> Building RPM (${staged} source file(s) staged)..."
 rpmbuild -ba "${BUILD_DIR}/SPECS/$(basename "${SPEC_PATH}")" \
   --define "_topdir ${BUILD_DIR}"

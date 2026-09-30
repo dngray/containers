@@ -1,4 +1,4 @@
-Name:           ai_fortress-selinux
+Name:           selinux-fortress
 Version:        1.0
 Release:        1.fc44
 Summary:        Generic SELinux policy jail for AI agents (Aider, OpenCode, etc.)
@@ -8,7 +8,7 @@ License:        MIT
 BuildRequires:  checkpolicy, policycoreutils
 Requires:       policycoreutils, libselinux-utils
 
-%global modulename ai_fortress
+%global modulename selinux-fortress
 
 %description
 This SELinux policy creates a restricted jail (fortress_agent_t) for AI

@@ -1,4 +1,4 @@
-Name:           container_snapclient-selinux
+Name:           selinux-snapclient
 Version:        1.0
 Release:        1.fc44
 Summary:        SELinux policy for isolated snapclient_t sandboxed container environments
@@ -7,7 +7,7 @@ License:        MIT
 BuildRequires:  checkpolicy, policycoreutils, selinux-policy-devel
 Requires:       policycoreutils, libselinux-utils
 
-%global modulename container_snapclient
+%global modulename selinux-snapclient
 
 %description
 This SELinux policy module provisions the custom snapclient_t container domain,

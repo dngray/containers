@@ -1,4 +1,4 @@
-policy_module(container_snapclient, 1.0.0)
+policy_module(selinux-snapclient, 1.0.0)
 
 gen_require(`
     type container_runtime_t;
