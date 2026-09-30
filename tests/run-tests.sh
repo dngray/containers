@@ -524,6 +524,32 @@ else
   pass "v1/v2 .ports differ (the API port)"
 fi
 
+# ---------------------------------------------------------------------------
+# 9. Credits HUD must throttle on every loop path
+# ---------------------------------------------------------------------------
+# Regression guard. The parse-error branch used to `continue` straight back to
+# the top of the loop, skipping the single sleep at the tail. A persistent
+# failure therefore became a ~5 req/s hot loop that cleared and redrew the
+# zellij pane faster than it could render, so the counter looked absent rather
+# than reporting an error. Every `continue` must be preceded by a sleep.
+echo
+echo "credits HUD throttle"
+CREDITS="$FORTRESS_DIR/fortress-credits"
+
+# Checked against git's recorded mode rather than `test -x`: the checkout's
+# exec bit is what lands on the user's machine, and a filesystem probe gives a
+# false negative wherever SELinux denies exec on the labelled source tree.
+check "fortress-credits is executable (git mode 100755)" \
+  "$(git ls-files -s -- apps/fortress/fortress-credits | grep -q '^100755 ' && echo 0 || echo 1)"
+check "every continue is preceded by a sleep" \
+  "$(awk '/^[[:space:]]*continue[[:space:]]*$/ { if (prev !~ /sleep/) bad = 1 }
+           { prev = $0 } END { exit bad ? 1 : 0 }' "$CREDITS" && echo 0 || echo 1)"
+check "credits refresh is 1200s" \
+  "$(grep -q '^REFRESH_SECONDS=1200$' "$CREDITS" && echo 0 || echo 1)"
+check "credits curl is bounded" \
+  "$(grep -q -- '--max-time' "$CREDITS" \
+     && grep -q -- '--connect-timeout' "$CREDITS" && echo 0 || echo 1)"
+
 echo
 echo "---------------------------------------"
 printf 'passed: %d   failed: %d\n' "$PASS" "$FAIL"
