@@ -1,4 +1,4 @@
-policy_module(ai_fortress, 1.0)
+policy_module(selinux-fortress, 1.0)
 
 # This policy carries a consolidated hardening pass. Where a tightening was
 # considered and REJECTED, the "KEPT deliberately" / "intentionally NOT used"

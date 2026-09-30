@@ -1,0 +1,147 @@
+#!/bin/bash
+# apps/fortress/fortress-exec — in-pane seat executor.
+#
+# Role-named argv:  fortress-exec <agent> <role> [args...]
+#   opencode server|tui   goose server|session   aider
+#
+# Holds the security baseline and the final podman run; each
+# apps/fortress/agents/<agent>.sh contributes only its image, mounts, env, and
+# command. Keeping the baseline here means no agent file can weaken it.
+#
+# `--print-plan` writes the resolved podman argv to stdout instead of running
+# it, so the v1/v2 diff and the secret-scoping checks can be asserted in tests.
+
+set -u
+
+CUR_UID=$(id -u)
+CUR_GID=$(id -g)
+TARGET_PATH=$(realpath "${FORTRESS_PATH:-$FORTRESS_HOME/src}")
+AGENT=${1:-}
+[ -n "$AGENT" ] || {
+  echo "fortress-exec: missing agent (aider|goose|opencode)" >&2
+  exit 2
+}
+# opencode/goose are role-named ("<agent> <role> [args...]"); aider is not
+# ("aider [args...]"). Consume $2 as a role only when it actually looks like
+# one -- otherwise `fortress-exec aider --model foo` would swallow "--model"
+# as the role and drop the real argument.
+ROLE=""
+case "${2-}" in
+""|-*)
+  # no positional role (aider, or an early flag)
+  [ "$#" -gt 0 ] && shift 1
+  ;;
+*)
+  ROLE=$2
+  [ "$#" -gt 1 ] && shift 2 || shift 1
+  ;;
+esac
+
+# --print-plan may appear before or after the agent/role pair.
+PRINT_PLAN=0
+ARGS=()
+for a in "$@"; do
+  if [ "$a" = "--print-plan" ]; then
+    PRINT_PLAN=1
+  else
+    ARGS+=("$a")
+  fi
+done
+set -- "${ARGS[@]+"${ARGS[@]}"}"
+
+# Locate the repo from this script's own location (two levels up).
+SELF_DIR=$(CDPATH= cd "$(dirname "$(realpath "$0")")" && pwd)
+REPO_ROOT=$(CDPATH= cd "$SELF_DIR/../.." && pwd)
+# shellcheck source=../../lib/cli.sh
+. "$REPO_ROOT/lib/cli.sh"
+# shellcheck source=../../lib/fortress.sh
+. "$REPO_ROOT/lib/fortress.sh"
+
+PROJECT_ID=$(basename "$TARGET_PATH")
+POD_NAME=$(fortress_pod_name "$PROJECT_ID")
+REL_PATH=${REL_PATH:-$(fortress_rel_path "$TARGET_PATH")} || {
+  error "Workspace '$TARGET_PATH' is outside the labelled source roots."
+  error "  Fortress home: $FORTRESS_HOME (from passwd; \$HOME is ${HOME:-unset})"
+  error "  Labelled roots: $(fortress_labelled_roots | tr '\n' ' ')"
+  error "  Both are compared as physical paths. If '$TARGET_PATH' is not under"
+  error "  either, it lives outside the labelled tree; check with ls -Zd."
+  exit 1
+}
+
+AGENT_FILE="$SELF_DIR/agents/$AGENT.sh"
+[ -f "$AGENT_FILE" ] || {
+  error "Unknown agent '$AGENT'. Expected one of: $FORTRESS_AGENTS"
+  exit 2
+}
+
+# The agent file sets: F_IMAGE, F_JAIL_HOME, F_JAIL_WORK, F_EXTRA_FLAGS, F_CMD.
+# It must not touch COMMON_FLAGS -- that is the security baseline's job.
+F_IMAGE=
+F_JAIL_HOME=
+F_JAIL_WORK=
+F_EXTRA_FLAGS=()
+F_CMD=()
+
+# shellcheck disable=SC1090
+. "$AGENT_FILE"
+
+for v in F_IMAGE F_JAIL_HOME F_JAIL_WORK; do
+  if [ -z "${!v}" ]; then
+    error "Agent '$AGENT' did not define $v."
+    exit 1
+  fi
+done
+
+# ---------------------------------------------------------------------------
+# Persistent folder prep. Podman aborts on a missing bind-mount source.
+# ---------------------------------------------------------------------------
+mkdir -p "$FORTRESS_CACHE/semble"
+mkdir -p "$FORTRESS_CACHE/$AGENT"
+fortress_prepare_dirs "$AGENT"
+
+# ---------------------------------------------------------------------------
+# Security baseline. Every seat gets exactly this, regardless of agent.
+# ---------------------------------------------------------------------------
+COMMON_FLAGS=(
+  --rm
+  --user "$CUR_UID:$CUR_GID"
+  --security-opt "label=type:fortress_agent_t"
+  --security-opt "no-new-privileges"
+  --cap-drop=ALL
+  --log-driver=none
+  --annotation "run.oci.keep_original_groups=1"
+  -e "HOME=$F_JAIL_HOME"
+  -e "PAGER=cat"
+  -e "TERM=xterm-256color"
+  -e "GIT_CONFIG_NOSYSTEM=1"
+)
+
+if [ "$PRINT_PLAN" -eq 1 ]; then
+  # Redact secrets. A plan is a debugging artifact: it lands in terminal
+  # scrollback, CI logs and bug reports, so it must never echo a credential
+  # that a real gopass lookup produced. Presence is still asserted by tests
+  # (the flag name survives), only the value is masked.
+  # The token is plain alphanumerics so it survives the %q quoting below
+  # unchanged (a <redacted> marker would come out as \<redacted\>).
+  redact() {
+    case "$1" in
+    *API_KEY=* | *PASSWORD=* | *_TOKEN=* | *SECRET=*)
+      printf '%s=REDACTED' "${1%%=*}"
+      ;;
+    *Authorization:*)
+      printf 'Authorization: REDACTED'
+      ;;
+    *)
+      printf '%s' "$1"
+      ;;
+    esac
+  }
+  printf 'podman'
+  for a in "${COMMON_FLAGS[@]}" "${F_EXTRA_FLAGS[@]}" "$F_IMAGE" "${F_CMD[@]}"; do
+    printf ' %q' "$(redact "$a")"
+  done
+  printf '\n'
+  exit 0
+fi
+
+podman run "${COMMON_FLAGS[@]}" "${F_EXTRA_FLAGS[@]}" "$F_IMAGE" "${F_CMD[@]}"

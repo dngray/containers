@@ -15,7 +15,7 @@ layout {
         // Right: The Jailed Aider workspace panel (Environment Aware)
         pane name="Aider (Jailed)" {
             command "bash"
-            args "-c" "ai-secure aider"
+            args "-c" "fortress-exec aider"
             focus true
         }
     }
