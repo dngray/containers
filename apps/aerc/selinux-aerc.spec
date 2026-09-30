@@ -1,4 +1,4 @@
-Name:           container_aerc-selinux
+Name:           selinux-aerc
 Version:        1.0
 Release:        1.fc44
 Summary:        SELinux policy for isolated aerc_t sandboxed container environments
@@ -7,7 +7,7 @@ License:        MIT
 BuildRequires:  checkpolicy, policycoreutils, selinux-policy-devel
 Requires:       policycoreutils, libselinux-utils
 
-%global modulename container_aerc
+%global modulename selinux-aerc
 
 %description
 This SELinux policy module provisions the custom aerc_t container domain,

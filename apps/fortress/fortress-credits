@@ -1,0 +1,55 @@
+#!/bin/bash
+# apps/fortress/fortress-credits — OpenRouter credit HUD for the fortress
+# zellij layouts.
+#
+# Fetches its own key from the secret store rather than reading
+# $OPENROUTER_API_KEY from the environment. The launcher deliberately does not
+# export provider keys, so this pane is the one place that needs the value --
+# and it keeps the credential out of every other pane.
+
+# Set a safety boundary to alert you before your mid-workflow API token requests fail
+LOW_BALANCE_THRESHOLD=5.00
+
+API_KEY=$(gopass show ai/openrouter-api-key) || {
+  echo -e "💰 \033[1;31mOpenRouter: [Secret Store Unreadable]\033[0m"
+  exit 1
+}
+
+while true; do
+  # Completely clear the active Zellij HUD pane boundary
+  printf "\033[2J\033[H"
+
+  # 1. Fetch raw accounting payload from the official credits endpoint
+  RAW_JSON=$(curl -s \
+    -H "Authorization: Bearer $API_KEY" \
+    -H "Accept: application/json" \
+    https://openrouter.ai/api/v1/credits)
+
+  # 2. Extract the current balance (total_credits - total_usage).
+  BAL=$(printf '%s' "$RAW_JSON" | jq -r '
+    if .data then (.data.total_credits - .data.total_usage) else empty end
+  ' 2>/dev/null)
+
+  # 3. Present the result, distinguishing parse failure from a low balance
+  if [ -z "$BAL" ]; then
+    echo -e "💰 \033[1;31mOpenRouter: [API Parse Error]\033[0m"
+    continue
+  fi
+
+  # 4. Threshold evaluation, in jq rather than `bc -l`.
+  #
+  # bc is not installed on every host, and when it was missing the arithmetic
+  # failed silently, leaving `$(( ))` to read the empty result as 0 -- which
+  # printed a zero balance in green instead of flagging the failure.
+  BAL_FORMATTED=$(printf '%.2f' "$BAL" 2>/dev/null)
+  LOW=$(printf '%s' "$BAL" | jq -r --argjson threshold "$LOW_BALANCE_THRESHOLD" '. < $threshold' 2>/dev/null)
+
+  if [ "$LOW" = "true" ]; then
+    echo -e "💰 OpenRouter: \033[1;31m\$$BAL_FORMATTED\033[0m \033[5;31m(LOW)\033[0m"
+  else
+    echo -e "💰 OpenRouter: \033[1;32m\$$BAL_FORMATTED\033[0m"
+  fi
+
+  # Sleep for 5 minutes (300 seconds) to prevent hitting OpenRouter's baseline rate limits
+  sleep 300
+done

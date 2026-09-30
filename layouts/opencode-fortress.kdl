@@ -18,12 +18,12 @@ layout {
                 // Tab at the top for server hosting & tracking live logs
                 pane name="AI Server Logs" {
                     command "bash"
-                    args "-c" "ai-secure opencode; exec bash"
+                    args "-c" "fortress-exec opencode server; exec bash"
                 }
                 // Active interactive window (waits for the opencode server HTTP listener, then attaches)
                 pane name="OpenCode TUI" {
                     command "bash"
-                    args "-c" "ai-secure shell"
+                    args "-c" "fortress-exec opencode tui"
                     focus true
                 }
             }

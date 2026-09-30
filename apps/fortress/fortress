@@ -1,0 +1,225 @@
+#!/bin/bash
+# apps/fortress/fortress — host-side Fortress seat launcher.
+#
+# Installed as a symlink (~/.local/bin/fortress -> .../apps/fortress/fortress).
+# Resolves itself, walks up to the justfile marker, then hands off to zellij
+# with a clean environment.
+#
+# Credential handling: provider API keys are written to opencode's auth.json
+# (0600) inside the seat's share bind mount and are NEVER exported into this
+# shell or the zellij session. That keeps them out of the LazyVim pane and the
+# status-bar plugin. See lib/fortress.sh.
+
+# ---------------------------------------------------------------------------
+# 0. Repository self-location
+# ---------------------------------------------------------------------------
+SELF=$(command -v fortress 2>/dev/null) || SELF=$0
+SELF=$(realpath "$SELF" 2>/dev/null) || true
+d=$(dirname "$SELF")
+REPO_ROOT=
+while [ "$d" != "/" ]; do
+  if [ -f "$d/justfile" ]; then
+    REPO_ROOT=$d
+    break
+  fi
+  d=$(dirname "$d")
+done
+
+if [ -z "$REPO_ROOT" ]; then
+  echo "error: cannot locate the containers repo from '$SELF'." >&2
+  echo "run this through a symlink that stays inside the repo, e.g.:" >&2
+  echo "  ln -sfn ../apps/fortress/fortress bin/fortress   # with the repo's bin/ on PATH" >&2
+  echo "  ln -sfn ~/src/containers/apps/fortress/fortress ~/.local/bin/fortress" >&2
+  exit 1
+fi
+
+# Make the seat executors (fortress-exec, fortress-credits, fortress-probe)
+# resolvable to the layouts and panes. bin/ carries only the `fortress` symlink,
+# since that is the sole name invoked from the interactive shell.
+export PATH="$REPO_ROOT/apps/fortress:$PATH"
+
+# shellcheck source=../../lib/cli.sh
+. "$REPO_ROOT/lib/cli.sh"
+# shellcheck source=../../lib/fortress.sh
+. "$REPO_ROOT/lib/fortress.sh"
+
+# ---------------------------------------------------------------------------
+# 1. Identity & context resolution
+#
+# ForTRESS_HOME (from passwd) supplies the default path, not $HOME: on
+# systemd-homed the real home is /var/home/<user> and $HOME may be stale.
+# ---------------------------------------------------------------------------
+# ForTRESS_HOME (from passwd) supplies the default path, not $HOME: on
+# systemd-homed the real home is /var/home/<user> and $HOME may be stale.
+# 1. Identity & context resolution
+# ---------------------------------------------------------------------------
+RAW_PATH=${1:-"$FORTRESS_HOME/src"}
+FORTRESS_PATH=$(realpath "$RAW_PATH") || exit 1
+export FORTRESS_PATH
+PROJECT_ID=$(basename "$FORTRESS_PATH")
+POD_NAME=$(fortress_pod_name "$PROJECT_ID")
+export POD_NAME
+
+# The opencode server/tui split is chosen by the Zellij layout (it hardcodes
+# both panes), not by an argument here. So the positionals are:
+#   path, seat tool, image variant, API generation.
+MODE=${2:-"opencode"}
+# opencode-only image variant (tag suffix): latest | full-binary | basic-binary
+VARIANT=${3:-"latest"}
+# opencode-only API generation: v1 | v2. Orthogonal to the variant; the
+# positional argument wins over $OPENCODE_API.
+API=${4:-"${OPENCODE_API:-v1}"}
+
+usage() {
+  echo "Usage: fortress <path> [aider|goose|opencode] [latest|full-binary|basic-binary] [v1|v2]"
+}
+
+# ---------------------------------------------------------------------------
+# 2. Fail-fast validation
+# ---------------------------------------------------------------------------
+case "$MODE" in
+aider | goose | opencode) ;;
+*)
+  usage
+  exit 1
+  ;;
+esac
+
+case "$VARIANT" in
+latest | full-binary | basic-binary) ;;
+*)
+  usage
+  exit 1
+  ;;
+esac
+
+case "$API" in
+v1 | v2) ;;
+*)
+  usage
+  exit 1
+  ;;
+esac
+
+if [ "$MODE" != "opencode" ] && [ "$VARIANT" != "latest" ]; then
+  warn "Image variant '$VARIANT' only applies to opencode mode; ignoring."
+  VARIANT="latest"
+fi
+
+if [ "$MODE" != "opencode" ] && [ "$API" != "v1" ]; then
+  warn "API generation '$API' only applies to opencode mode; ignoring."
+  API="v1"
+fi
+
+# The workspace must sit under a root the policy labels as fortress_src_t,
+# otherwise the seat cannot read its own files (see lib/fortress.sh).
+if ! REL_PATH=$(fortress_rel_path "$FORTRESS_PATH"); then
+  error "Workspace '$FORTRESS_PATH' is outside the labelled source roots."
+  error "  Fortress home: $FORTRESS_HOME (from passwd; \$HOME is ${HOME:-unset})"
+  _lr=$(fortress_labelled_roots | tr '\n' ' ')
+  error "  Labelled roots: $_lr"
+  error "  Both are compared as physical paths. If '$FORTRESS_PATH' is not under"
+  error "  either, either it lives outside the labelled tree or the policy was"
+  error "  installed before restorecon ran on it: check with ls -Zd."
+  exit 1
+fi
+export REL_PATH
+
+# ---------------------------------------------------------------------------
+# 3. v2 capability check
+#
+# v2 is plumbed through the build, config and SELinux policy, but no v2 image
+# is published yet. Rather than refusing unconditionally, probe for a usable
+# image so the check self-clears the moment one is built. This must run before
+# the pod is created and before any secret is fetched, so the failure is a
+# message rather than a broken seat.
+# ---------------------------------------------------------------------------
+if [ "$API" = "v2" ]; then
+  F_VARIANT=$VARIANT
+  IMAGE_REF=$(fortress_opencode_image server) || {
+    error "Invalid opencode variant '$VARIANT'."
+    exit 1
+  }
+
+  if ! podman image exists "$IMAGE_REF" 2>/dev/null &&
+    ! podman manifest inspect "$IMAGE_REF" >/dev/null 2>&1; then
+    error "Opencode API 'v2' is not available: no image '$IMAGE_REF'."
+    info "Build it with 'just opencode-build v2' or use v1."
+    exit 1
+  fi
+  ok "v2 image found: $IMAGE_REF"
+fi
+
+# ---------------------------------------------------------------------------
+# 4. Strict context-aware cleanup
+# ---------------------------------------------------------------------------
+cleanup_fortress() {
+  info "Dismantling Fortress components for $PROJECT_ID..."
+  podman pod rm -f -t 0 "$POD_NAME" 2>/dev/null
+
+  # Orphaned containers belonging ONLY to this project context.
+  podman ps -a --filter "name=fortress-.*-$PROJECT_ID" --format "{{.ID}}" |
+    xargs -r podman rm -f -t 0 >/dev/null 2>&1
+  ok "Gates closed."
+}
+
+trap cleanup_fortress EXIT INT TERM
+
+# ---------------------------------------------------------------------------
+# 5. Infrastructure prep
+# ---------------------------------------------------------------------------
+info "Purging old instances for $POD_NAME..."
+podman pod rm -f -t 0 "$POD_NAME" 2>/dev/null
+
+info "Initializing Fortress Pod (Shared Mode): $POD_NAME"
+podman pod create \
+  --name "$POD_NAME" \
+  --share net \
+  --userns keep-id \
+  --network bridge
+
+# ---------------------------------------------------------------------------
+# 6. Credentials
+#
+# Fetched into this shell's locals only. Provider keys go straight into
+# auth.json; the server bind-password is left unexported and re-fetched per
+# seat pane by fortress-exec. Nothing here reaches the zellij environment.
+# ---------------------------------------------------------------------------
+info "Unlocking fortress credentials..."
+
+SERVER_USERNAME="opencode"
+# Pre-flight only: this proves the store is readable at launch so a locked or
+# missing entry fails here rather than inside a seat pane. The value itself is
+# discarded — fortress-exec re-fetches it per pane, so it never reaches the
+# zellij session environment.
+gopass show ai/opencode-server-pass >/dev/null || {
+  error "Could not read the server password from the secret store."
+  exit 1
+}
+
+if [ "$MODE" = "opencode" ]; then
+  # Plain locals, never exported: fortress_write_auth_json reads them from this
+  # shell. Exporting here would put them in the environment the launcher hands
+  # to zellij, which is the leak this whole arrangement exists to prevent.
+  OPENROUTER_API_KEY=$(gopass show ai/openrouter-api-key) || exit 1
+  OPENAI_API_KEY=$(gopass show ai/openai-api-key) || exit 1
+  ANTHROPIC_API_KEY=$(gopass show ai/anthropic-api-key) || exit 1
+  fortress_write_auth_json
+  ok "Wrote credential store: $FORTRESS_AUTH_JSON (0600)"
+  unset OPENROUTER_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY
+fi
+
+# Non-exported: seat panes re-fetch this themselves via gopass, so it never
+# lands in the zellij session environment.
+export FORTRESS_SERVER_USERNAME="$SERVER_USERNAME"
+unset SERVER_USERNAME
+
+export OPENCODE_VARIANT="$VARIANT"
+export OPENCODE_API="$API"
+export GOGOOSE_MODE="${GOOSE_MODE:-nanogpt}"
+
+# ---------------------------------------------------------------------------
+# 7. Execution environment launch
+# ---------------------------------------------------------------------------
+info "Fortifying workspace in $MODE mode at: $FORTRESS_PATH"
+exec zellij --layout "$REPO_ROOT/layouts/${MODE}-fortress.kdl"
