@@ -56,18 +56,20 @@ COPY --from=builder \
      /usr/local/libexec/tangd-keygen \
      /usr/local/bin/tangd-keygen
 
-COPY entrypoint-scripts \
+# local patch over padhi-homelab/docker_tang: upstream relies on COPY + "chmod +x",
+# which bakes in the build context's file modes. Under a restrictive umask those are
+# 0640/0750, and "chmod +x" turns 0640 into 0751 -- executable but unreadable by the
+# unprivileged DOCKER_UID the entrypoint drops to, so /bin/sh cannot open the script.
+# --chmod=0755 pins the modes instead (same as aerc-bridge/mail-sync Containerfiles).
+COPY --chmod=0755 entrypoint-scripts \
      /etc/docker-entrypoint.d/99-extra-scripts
-COPY check-servers.sh \
+COPY --chmod=0755 check-servers.sh \
      /usr/local/bin/check-servers
-COPY start-servers.sh \
+COPY --chmod=0755 start-servers.sh \
      /usr/local/bin/start-servers
 
 
-RUN chmod +x /etc/docker-entrypoint.d/99-extra-scripts/*.sh \
-             /usr/local/bin/check-servers \
-             /usr/local/bin/start-servers \
- && apk add --no-cache --update \
+RUN apk add --no-cache --update \
             http-parser \
             jansson \
             openssl \
