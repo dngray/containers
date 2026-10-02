@@ -28,18 +28,21 @@ repo; it injects `bin/` onto PATH so `ai-secure` resolves inside the fortress.
 code-fortress <path> [aider|opencode|goose] [latest|full-binary|basic-binary] [v1|v2]
 ```
 
-The last three are optional; `opencode`, `latest` and `v1` are the defaults, so
+The last three are optional; `opencode`, `latest` and `v2` are the defaults, so
 the common case is just `code-fortress . opencode latest`. The variant is
 opencode-only, and the API generation is a separate axis that selects the
-config, the SELinux policy and the launcher wiring — it does not change the
-image variant. Both can also come from the environment (`OPENCODE_VARIANT`,
-`OPENCODE_API`), with the argument taking precedence.
+config, the SELinux policy, the port and the launcher wiring — it does not
+change the image variant. Both can also come from the environment
+(`OPENCODE_VARIANT`, `OPENCODE_API`), with the argument taking precedence.
 
-`v2` is wired through the build and the policy but **has no image yet** — there
-is nothing published to run, so `code-fortress` refuses it rather than starting
-a seat that cannot come up. That refusal is the one place the generation is
-enforced, and it is deliberately early: it happens before the pod is created
-and before credentials are fetched.
+`v2` is the current generation and the default; `v1` stays selectable for a
+legacy seat. The launcher probes for the selected generation's image before it
+creates the pod or fetches any secret, so an unbuilt generation fails with a
+message naming the build recipes rather than a half-started seat.
+
+The two generations are not interchangeable at build time: each upstream tag
+declares its own bun version (`1.3.14` on v1 tags, `1.4.2` on v2), and the build
+refuses to continue if the checked-out tag and the selected bun image disagree.
 
 ## Fortress DB access
 

@@ -177,7 +177,58 @@ ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION:-26.9.0}"
 ANSIBLE_POSIX_VERSION="${ANSIBLE_POSIX_VERSION:-2.2.2}"
 ANSIBLE_COMMUNITY_GENERAL_VERSION="${ANSIBLE_COMMUNITY_GENERAL_VERSION:-13.4.0}"
 
-: "${OPENCODE_TAG:=v${LATEST_VERSION:-1.18.33}}"
+# ---------------------------------------------------------------------------
+# Per-generation constants.
+#
+# The single source of truth for what differs between the v1 and v2 API
+# generations. Each generation's version literal lives here and nowhere else;
+# the OPENCODE_TAG fallback, the bun toolchain, the baked release channel and
+# both ocbin builders all read this table.
+#
+# OC_BUN_IMAGE is not a preference, it is a hard requirement. Every v1 tag
+# declares "packageManager": "bun@1.3.14" and every v2 tag "bun@1.4.2", and both
+# generations throw from packages/script/src/index.ts when the running bun
+# does not satisfy the declared range. Upstream's own CI agrees -- publish.yml
+# pins bun-version 1.4.2 for the v2 CLI build.
+#
+# Upstream's guard cannot catch a cross-generation pairing on its own. At
+# v2.0.22 it relaxes the declared pin to a caret range
+# (packages/script/src/index.ts, comment "relax version requirement") and
+# tests semver.satisfies(bun, "^<declared>"), so ^1.3.14 admits 1.4.2 -- a v1
+# tree does not reject the v2 toolchain.
+#
+# Do NOT go looking for that failure mode. Per the repo owner, building a v1
+# tree on bun 1.4+ runs to completion and then crashes at runtime with a
+# confusing error; that is their report from having hit it, not something
+# reproduced here, and reproducing it would cost a full build to learn nothing
+# this table cannot state. assert_bun_matches_tag() exists so the pairing is
+# checked up front instead of discovered at runtime: it compares the
+# checked-out tag's OWN declared pin against the image chosen here.
+# ---------------------------------------------------------------------------
+OPENCODE_API="${OPENCODE_API:-v2}"
+case "${OPENCODE_API}" in
+  v1)
+    OC_DEFAULT_VERSION="1.18.34"
+    OC_CHANNEL="prod"
+    OC_BUN_IMAGE="docker.io/oven/bun:1.3.14-debian"
+    ;;
+  v2)
+    OC_DEFAULT_VERSION="2.0.22"
+    # MUST be a channel whose defaultPort() is 0xc0de (49374). service-config.ts
+    # returns 0xc0de only for latest|dev|beta|next and otherwise HASHES the
+    # channel name into 10000-59999, so baking v1's "prod" here would silently
+    # move the server off the port the SELinux policy labels and off the one
+    # the fortress probes.
+    OC_CHANNEL="latest"
+    OC_BUN_IMAGE="docker.io/oven/bun:1.4.2-debian"
+    ;;
+  *)
+    error "Error: Unknown OPENCODE_API '${OPENCODE_API}' (expected v1 or v2)."
+    exit 1
+    ;;
+esac
+
+: "${OPENCODE_TAG:=v${LATEST_VERSION:-$OC_DEFAULT_VERSION}}"
 : "${RESOLVED_HASH:?resolve_version must run first}"
 
 BASE_IMG="${NS}/base:v1"
@@ -291,6 +342,57 @@ ensure() {
 # ---------------------------------------------------------------------------
 ocbin_for() {
   [ "$1" = binary ] && echo "${OC_BIN_IMG}" || echo "${OC_SRC_IMG}"
+}
+
+# ---------------------------------------------------------------------------
+# assert_bun_matches_tag(<checkout_dir>)
+#
+# Description: fails the build when the pinned tag's own bun declaration
+#   disagrees with the bun image the generation table selected. Reads
+#   packageManager straight out of the checked-out tree, so it validates the
+#   ACTUAL source about to be compiled rather than a remembered version.
+#
+#   Upstream's own guard cannot catch the pairing it looks like it catches: at
+#   v2.0.22, packages/script/src/index.ts relaxes the declared pin to a caret
+#   range ("relax version requirement") and tests
+#   semver.satisfies(bun, "^<declared>"), so ^1.3.14 is satisfied by bun 1.4.2
+#   and a v1 tree does not reject the v2 toolchain. Per the repo owner, such a
+#   build runs to completion and then crashes at runtime -- their report, not
+#   something reproduced here. Here it stops before the compile instead of after
+#   it.
+#
+#   Matched on the full x.y.z (a declared 1.4.2 accepts a 1.4.2.x image, not
+#   1.4.3), so a bun patch bump has to be a deliberate edit on both sides.
+# Args:
+#   $1  checkout_dir (string): path to the checked-out opencode source tree
+# Globals:
+#   OC_BUN_IMAGE (string): image the generation table selected
+# Outputs:
+#   Exits 1 with both versions named when they disagree
+# ---------------------------------------------------------------------------
+assert_bun_matches_tag() {
+  local checkout_dir="$1" want declared
+  want=${OC_BUN_IMAGE##*:}   # 1.4.2-debian
+  want=${want%-debian}       # 1.4.2
+  declared=$(jq -r '.packageManager // "" | split("@")[1] // ""' \
+    "${checkout_dir}/package.json" 2>/dev/null || true)
+
+  if [ -z "$declared" ]; then
+    error "No packageManager field in ${checkout_dir}/package.json; cannot verify the bun toolchain."
+    info "  A v2 tree under packages/opencode has moved; check the tag is not a v1/v2 mix."
+    return 1
+  fi
+  case "$declared" in
+    "$want" | "$want".*) ;;
+    *)
+      error "bun toolchain mismatch: tag ${OPENCODE_TAG} declares packageManager bun@${declared}," \
+        "but generation ${OPENCODE_API} selects ${OC_BUN_IMAGE} (bun ${want})."
+      info "  Upstream's own ^${declared} guard accepts bun ${want}, so this would not be caught upstream."
+      info "  Build this tag with the bun it declares, or change OC_BUN_IMAGE in the generation table."
+      return 1
+      ;;
+  esac
+  ok " bun toolchain matches tag: bun@${declared} (${OC_BUN_IMAGE})"
 }
 
 # ---------------------------------------------------------------------------
@@ -459,11 +561,23 @@ build_pydex() {
 # build_ocbin_source()
 #
 # Description: builds the opencode binary from the pinned git tag using the
-#   official bun base image. The source tree and bun dependency cache live
-#   on the host so repeat runs are incremental (git fetch + no-op install).
+#   generation's pinned bun base image. The source tree and bun dependency
+#   cache live on the host so repeat runs are incremental (git fetch + no-op
+#   install).
+#
+#   Three buildah run steps, not one, because the toolchain check has to land
+#   BETWEEN the checkout and the expensive part. The checkout lands in the host
+#   cache (bind-mounted), so assert_bun_matches_tag can read the tag's own
+#   package.json from here. Upstream's caret-range guard does not stop a
+#   cross-generation pairing, and per the repo owner such a build finishes and
+#   then crashes at runtime -- so no amount of log-reading after the fact fixes
+#   the twenty minutes it cost.
 # Globals:
 #   OPENCODE_TAG (string): git tag to build from
 #   LATEST_VERSION (string): version baked into the binary at build time
+#   OC_BUN_IMAGE (string): generation's bun base image
+#   OC_CHANNEL (string): release channel baked into the binary (see the
+#       generation table: v2 must bake "latest" or the server port hashes)
 #   BUILD_JOBS (int): bun/turbo concurrency
 #   CACHE (string): host cache dir; source tree + bun store cached
 #   OC_SRC_IMG (string): image name committed when complete
@@ -473,9 +587,12 @@ build_pydex() {
 build_ocbin_source() {
   local container release_tag
   release_tag="${OPENCODE_TAG}"
-  container=$(buildah from docker.io/oven/bun:1.3.14-debian)
+  ocbin_source_layout
+  container=$(buildah from "${OC_BUN_IMAGE}")
   buildah config --env HOME=/mnt/host_cache/bun "$container"
   buildah config --env NODE_OPTIONS=--max-old-space-size=4096 "$container"
+
+  # 1. toolchain + source checkout (cheap; nothing compiled yet)
   buildah run --volume "${CACHE}:/mnt/host_cache" "$container" -- bash -ec "
     set -e
     export HOME=/mnt/host_cache/bun
@@ -492,32 +609,151 @@ build_ocbin_source() {
       git checkout FETCH_HEAD
       cd ..
     fi
+    rm -rf /src/opencode
     mkdir -p /src/opencode
     cp -r /mnt/host_cache/opencode_src/repo/. /src/opencode/
+  "
+
+  # 2. fail fast if the tag wants a different bun than the generation table gave us
+  assert_bun_matches_tag "${CACHE}/opencode_src/repo"
+
+  # 3. install + build. OPENCODE_VERSION and OPENCODE_CHANNEL are the same two
+  #    variables both generations read for the baked-in version/channel; the
+  #    channel is what decides the server port, so it comes from the table
+  #    rather than being written here.
+  #
+  #    The cache volume is re-mounted here as well as in step 1: HOME is
+  #    /mnt/host_cache/bun, so without --volume bun's module cache would live on
+  #    the container's throwaway layer and every build would re-download the
+  #    whole dependency tree.
+  buildah run --volume "${CACHE}:/mnt/host_cache" "$container" -- bash -ec "
+    set -e
+    export HOME=/mnt/host_cache/bun
     cd /src/opencode
-    bun install --backend=copyfile --ignore-scripts --network-concurrency=1
-    export OPENCODE_VERSION=\"${LATEST_VERSION:-1.18.33}\"
-    export OPENCODE_CHANNEL=prod
+    export OPENCODE_VERSION=\"${LATEST_VERSION:-$OC_DEFAULT_VERSION}\"
+    export OPENCODE_CHANNEL=${OC_CHANNEL}
     export HUSKY=0
     export BUN_CONFIG_MAX_WORKERS=${BUILD_JOBS}
-    HUSKY=0 bun run --cwd packages/core fix-node-pty
-    bun x turbo run build --filter=opencode --concurrency ${BUILD_JOBS} \\
-      --env-mode=loose -- --single
-    chmod +x packages/opencode/dist/opencode-linux-x64/bin/opencode
-    cp packages/opencode/dist/opencode-linux-x64/bin/opencode /usr/local/bin/opencode
+    $(ocbin_source_install_cmds)
+    $(ocbin_source_build_cmds)
+    chmod +x ${OC_SRC_OUT}
+    cp ${OC_SRC_OUT} /usr/local/bin/opencode
     rm -rf /src/opencode
   "
   buildah commit --rm "$container" "${OC_SRC_IMG}"
 }
 
 # ---------------------------------------------------------------------------
+# ocbin_source_layout()
+#
+# Description: sets OC_SRC_OUT, the in-tree path where the build leaves the
+#   compiled binary. Differs per generation because the package layout does:
+#   v1 has packages/opencode, v2 deleted it for the split
+#   packages/{cli,server,client,tui,...} layout. Runs on the HOST (a plain
+#   call, not a command substitution -- a subshell would discard the
+#   assignment) and is called before the buildah run body quotes ${OC_SRC_OUT}.
+# Globals:
+#   OPENCODE_API (string): generation selector
+# Outputs:
+#   Sets OC_SRC_OUT (string)
+# ---------------------------------------------------------------------------
+ocbin_source_layout() {
+  case "${OPENCODE_API}" in
+    v1) OC_SRC_OUT="packages/opencode/dist/opencode-linux-x64/bin/opencode" ;;
+    v2) OC_SRC_OUT="packages/cli/dist/cli-linux-x64/bin/opencode" ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
+# ocbin_source_install_cmds() / ocbin_source_build_cmds()
+#
+# Description: emit the shell fragment for the current generation's install and
+#   build steps. Split out of build_ocbin_source because they run INSIDE a
+#   double-quoted buildah run body, so an inline case there would be re-expanded
+#   by the host shell and silently lose its own generation test. These return
+#   the fragment instead, and the case is evaluated on the host where
+#   OPENCODE_API still means what it says.
+#
+# v1 install: --ignore-scripts plus an explicit fix-node-pty call, because the
+#   install is told not to run lifecycle scripts.
+#
+# v2 install: no --ignore-scripts, so the root postinstall
+#   (bun run --cwd packages/core fix-node-pty) runs the way it does upstream.
+#   It only chmods node-pty's prebuilt spawn-helper and no-ops when hoisted.
+#   --frozen-lockfile makes the workspace resolve from the tag's own bun.lock
+#   instead of re-resolving, so a rebuild of the same hash is byte-stable.
+#
+# v2 build: packages/cli/script/build.ts is a single Bun.build + --compile of
+#   src/index.ts into a self-contained executable. Three flags matter:
+#     --single       build only the host platform/arch (linux-x64), so the
+#                    result is one binary instead of twelve.
+#     --skip-install do not let build.ts run its own
+#                    `bun install --os=* --cpu=*` of every platform's
+#                    @opentui/core and @opencode-ai/pty. The install above
+#                    already put the host-platform packages in place:
+#                    @opencode-ai/pty is a plain dependency of packages/cli,
+#                    so it pulled @opencode-ai/pty-linux-x64-gnu, which is what
+#                    resolveOpencodePty() embeds.
+#     (no --skip-web-ui) the solidjs/vite build of packages/app runs and its
+#                    brotli-compressed output is baked into the executable as
+#                    the web UI asset archive.
+#   Output lands in packages/cli/dist/cli-linux-x64/bin/opencode -- note the
+#   directory is cli-linux-x64, not opencode-linux-x64 (build.ts rewrites the
+#   target name before writing).
+# Globals:
+#   OPENCODE_API (string): generation selector
+#   BUILD_JOBS (int): turbo concurrency (v1 only; v2 build.ts is single-pass)
+# Outputs:
+#   Prints a shell fragment
+# ---------------------------------------------------------------------------
+ocbin_source_install_cmds() {
+  case "${OPENCODE_API}" in
+    v1)
+      printf '%s' "bun install --backend=copyfile --ignore-scripts --network-concurrency=1
+    HUSKY=0 bun run --cwd packages/core fix-node-pty"
+      ;;
+    v2)
+      printf '%s' "bun install --frozen-lockfile --network-concurrency=1"
+      ;;
+  esac
+}
+
+ocbin_source_build_cmds() {
+  case "${OPENCODE_API}" in
+    v1)
+      printf '%s' "bun x turbo run build --filter=opencode --concurrency ${BUILD_JOBS} \\
+      --env-mode=loose -- --single"
+      ;;
+    v2)
+      printf '%s' "bun run --cwd packages/cli script/build.ts \\
+      --single --skip-install --outdir=dist"
+      ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
 # build_ocbin_binary()
 #
-# Description: layers the pinned upstream opencode release binary onto a
-#   scratch rootfs after sha256 VERIFYING it against the release asset
-#   digest published by the GitHub API.
+# Description: layers the pinned upstream opencode release binary onto a scratch
+#   rootfs, after VERIFYING it against a digest published by the upstream
+#   registry. The registry differs per generation, but the property does not:
+#   both paths pin a version and verify a digest computed by the publisher, so
+#   a swapped or truncated download fails the build instead of becoming an image.
+#
+#   v1 -- GitHub Releases. The release for the tag carries
+#   opencode-linux-x64.tar.gz with a sha256 `.digest`, checked with sha256sum.
+#
+#   v2 -- npm. A v2 tag never gets a GitHub Release: releases/tags/v2.x.y is a
+#   404, and no workflow creates one (publish.yml pushes npm and one ghcr image;
+#   release-github-action.yml only bumps github-v* tags for the legacy v1
+#   action). The npm launcher opencode-ai does not track v2 either -- its latest
+#   dist-tag is still 1.18.34. v2 ships as the per-platform package
+#   @opencode/cli-linux-x64, whose registry manifest carries a sha512
+#   dist.integrity for the tarball. Same guarantee, different authority.
 # Globals:
-#   OPENCODE_TAG (string): release tag whose asset is downloaded
+#   OPENCODE_TAG (string): release tag whose binary is downloaded
+#   LATEST_VERSION (string): version of that release (npm path)
+#   OC_DEFAULT_VERSION (string): fallback version (npm path)
 #   RESOLVED_HASH (string): tag hash; names the per-hash DL subdir
 #   DL (string): host dir holding downloaded release tarballs
 #   OC_BIN_IMG (string): image name committed when complete
@@ -525,22 +761,16 @@ build_ocbin_source() {
 #   Commits ${OC_BIN_IMG} with /usr/local/bin/opencode
 # ---------------------------------------------------------------------------
 build_ocbin_binary() {
-  local release_tag download_dir tarball asset_digest container
+  local release_tag download_dir container
   release_tag="${OPENCODE_TAG}"
   download_dir="${DL}/${RESOLVED_HASH}"
-  tarball="${download_dir}/opencode-linux-x64.tar.gz"
   mkdir -p "${download_dir}"
 
   if [ ! -x "${download_dir}/opencode" ]; then
-    info "==> Resolving pinned binary release digest (${release_tag})..."
-    asset_digest=$(curl -fsSL "https://api.github.com/repos/anomalyco/opencode/releases/tags/${release_tag}" |
-      jq -r '.assets[] | select(.name == "opencode-linux-x64.tar.gz") | .digest')
-    ok " Digest locked: ${asset_digest}"
-    curl -fL --retry 3 -o "${tarball}" \
-      "https://github.com/anomalyco/opencode/releases/download/${release_tag}/opencode-linux-x64.tar.gz"
-    echo "${asset_digest#sha256:}  ${tarball}" | sha256sum -c -
-    tar -xzf "${tarball}" -C "${download_dir}"
-    rm -f "${tarball}"
+    case "${OPENCODE_API}" in
+      v1) fetch_ocbin_v1 "${release_tag}" "${download_dir}" ;;
+      v2) fetch_ocbin_v2 "${release_tag}" "${download_dir}" ;;
+    esac
   fi
   chmod +x "${download_dir}/opencode"
 
@@ -548,6 +778,94 @@ build_ocbin_binary() {
   buildah copy "$container" "${download_dir}/opencode" /usr/local/bin/opencode
   buildah config --env OPENCODE_BINARY=1 "$container"
   buildah commit --rm "$container" "${OC_BIN_IMG}"
+}
+
+# ---------------------------------------------------------------------------
+# fetch_ocbin_v1(<release_tag>, <download_dir>)
+#
+# Description: downloads the GitHub Release tarball for a v1 tag and verifies
+#   it against the sha256 digest the release asset publishes.
+# Globals:
+#   DL (string): host dir the tarball is staged through
+# Outputs:
+#   Extracts <download_dir>/opencode
+# ---------------------------------------------------------------------------
+fetch_ocbin_v1() {
+  local release_tag="$1" download_dir="$2" tarball asset_digest
+  tarball="${download_dir}/opencode-linux-x64.tar.gz"
+
+  info "==> Resolving pinned binary release digest (${release_tag})..."
+  asset_digest=$(curl -fsSL "https://api.github.com/repos/anomalyco/opencode/releases/tags/${release_tag}" |
+    jq -r '.assets[] | select(.name == "opencode-linux-x64.tar.gz") | .digest')
+  if [ -z "${asset_digest}" ]; then
+    error "No opencode-linux-x64.tar.gz digest published for ${release_tag}."
+    info "  A v1 release must carry the asset; check the tag exists upstream."
+    return 1
+  fi
+  ok " Digest locked: ${asset_digest}"
+
+  curl -fL --retry 3 -o "${tarball}" \
+    "https://github.com/anomalyco/opencode/releases/download/${release_tag}/opencode-linux-x64.tar.gz"
+  echo "${asset_digest#sha256:}  ${tarball}" | sha256sum -c -
+  tar -xzf "${tarball}" -C "${download_dir}"
+  rm -f "${tarball}"
+}
+
+# ---------------------------------------------------------------------------
+# fetch_ocbin_v2(<release_tag>, <download_dir>)
+#
+# Description: downloads the @opencode/cli-linux-x64 tarball for a v2 version
+#   and verifies it against the sha512 dist.integrity the npm registry
+#   publishes, then lifts the single bin/opencode out of it.
+#
+#   The package name is not a free choice -- publish.ts derives it from the
+#   build target (@opencode/cli- + the linux-x64 target), so a package that
+#   resolves for v2.0.22 is proof the release pipeline produced that version.
+# Globals:
+#   LATEST_VERSION, OC_DEFAULT_VERSION (string): version to fetch
+# Outputs:
+#   Extracts <download_dir>/opencode
+# Returns:
+#   Exits 1 if the version is unpublished, the integrity field is missing, or
+#     the tarball does not verify
+# ---------------------------------------------------------------------------
+fetch_ocbin_v2() {
+  local release_tag="$1" download_dir="$2"
+  local pkg version manifest tarball tarball_url integrity
+
+  pkg="@opencode/cli-linux-x64"
+  version="${LATEST_VERSION:-$OC_DEFAULT_VERSION}"
+  tarball="${download_dir}/${pkg##*/}-${version}.tgz"
+
+  info "==> Resolving pinned binary integrity (${pkg}@${version})..."
+  manifest=$(curl -fsSL "https://registry.npmjs.org/${pkg//\//%2f}/${version}" 2>/dev/null || true)
+  if [ -z "${manifest}" ]; then
+    error "npm has no published ${pkg}@${version}."
+    info "  Upstream only publishes a v2 binary once the release job runs; check the tag exists."
+    return 1
+  fi
+
+  integrity=$(printf '%s' "${manifest}" | jq -r '.dist.integrity // empty')
+  tarball_url=$(printf '%s' "${manifest}" | jq -r '.dist.tarball // empty')
+  if [ -z "${integrity}" ] || [ -z "${tarball_url}" ]; then
+    error "No dist.integrity/dist.tarball in the ${pkg}@${version} manifest; refusing an unverified download."
+    return 1
+  fi
+  ok " Integrity locked: ${integrity}"
+
+  curl -fL --retry 3 -o "${tarball}" "${tarball_url}"
+  # dist.integrity is "sha512-<base64>" but sha512sum prints hex, so convert.
+  # od/tr rather than xxd: xxd is a vim package, not a base install, and this
+  # script runs on whatever host does the build.
+  printf '%s  %s\n' \
+    "$(printf '%s' "${integrity#sha512-}" | base64 -d | od -An -v -tx1 | tr -d ' \n')" \
+    "${tarball}" | sha512sum -c -
+  # npm tarballs carry a "package/bin/" prefix. Naming the single member keeps
+  # the 236-byte package.json out of the image, and stripping TWO components
+  # lands it at <download_dir>/opencode, matching the v1 layout that
+  # build_ocbin_binary copies into the image.
+  tar -xzf "${tarball}" -C "${download_dir}" --strip-components=2 package/bin/opencode
+  rm -f "${tarball}"
 }
 
 # ---------------------------------------------------------------------------

@@ -81,10 +81,17 @@ plan() {
     HOME="$_home"
     FORTRESS_HOME="$_home"
     FORTRESS_PATH="$_home/src/proj"
-    OPENCODE_API="$_api"
     OPENCODE_VARIANT="$_variant"
-    export PATH HOME FORTRESS_HOME FORTRESS_PATH OPENCODE_API OPENCODE_VARIANT
-    REG_URL="registry.example" bash "$EXEC" "$_agent" "$_role" --print-plan 2>/dev/null
+    export PATH HOME FORTRESS_HOME FORTRESS_PATH OPENCODE_VARIANT
+    # "unset" leaves OPENCODE_API absent entirely. `set -u` distinguishes an
+    # absent variable from an empty one, so exporting OPENCODE_API="" would
+    # NOT reproduce a crash on an unguarded read.
+    if [ "$_api" = unset ]; then
+      unset OPENCODE_API
+    else
+      export OPENCODE_API="$_api"
+    fi
+    REG_URL="registry.example" "$EXEC" "$_agent" "$_role" --print-plan 2>/dev/null
   )
   [ "$_own_home" -eq 1 ] && rm -rf "$_home"
   return 0
@@ -217,7 +224,7 @@ for mode in nanogpt openrouter; do
     PATH="$home/bin:$PATH" HOME="$home" FORTRESS_HOME="$home" \
       FORTRESS_PATH="$home/src/proj" \
       GOOSE_MODE="$mode" REG_URL=registry.example \
-      bash "$EXEC" goose server --print-plan 2>/dev/null
+      "$EXEC" goose server --print-plan 2>/dev/null
   )
   rm -rf "$home"
 
@@ -323,7 +330,7 @@ for combo in "opencode server" "opencode tui" "goose server" "goose session"; do
     PATH="$_nopm/bin:/usr/bin:/bin" HOME="$_nopm" FORTRESS_HOME="$_nopm" \
       FORTRESS_PATH="$_nopm/src/proj" \
       OPENCODE_API=v1 REG_URL=registry.example \
-      bash "$EXEC" "$1" "$2" --print-plan 2>/dev/null
+      "$EXEC" "$1" "$2" --print-plan 2>/dev/null
   )
   case "$pout" in
   "" | *"command not found"* | *"Launch via fortress"*) rc=1 ;;
@@ -345,7 +352,7 @@ sout=$(
   PATH="$_stale/bin:/usr/bin:/bin" \
     HOME="$_stale/home" FORTRESS_HOME="$_stale/newroot" \
     FORTRESS_PATH="$_stale/newroot/src/proj" OPENCODE_API=v1 REG_URL=registry.example \
-    bash "$EXEC" opencode server --print-plan 2>/dev/null
+    "$EXEC" opencode server --print-plan 2>/dev/null
 )
 check "stale \$HOME: path under the passwd home still plans" \
   "$([ -n "$sout" ] && printf '%s' "$sout" | grep -q 'fJail\|/home/opencode/workspace' && echo 0 || echo 1)" \
@@ -370,6 +377,14 @@ case "$v2" in *--port\ 49374*) p2=0 ;; *) p2=1 ;; esac
 check "v1 server binds 4096" "$p1"
 check "v2 server binds 49374" "$p2"
 
+# fortress-exec is a documented standalone entrypoint for restarting a single
+# in-pane seat, so the seat must resolve the generation default itself. The
+# unguarded read it used to do died with "OPENCODE_API: unbound variable"
+# under `set -u`, which only shows up when nothing exported the variable.
+d=$(plan opencode server unset latest)
+case "$d" in *--port\ 49374*) q0=0 ;; *) q0=1 ;; esac
+check "seat defaults to v2 (49374) when OPENCODE_API is unset" "$q0"
+
 # Everything else must be identical once the port token is normalised away.
 norm() { printf '%s' "$1" | sed -E 's/(4096|49374)/PORT/g'; }
 [ "$(norm "$v1")" = "$(norm "$v2")" ] &&
@@ -384,6 +399,17 @@ case "$t1" in *"/api/info"*) q1=1 ;; *) q1=0 ;; esac
 case "$t2" in *"/api/info"*) q2=0 ;; *) q2=1 ;; esac
 check "v1 TUI probes / (not /api/info)" "$q1"
 check "v2 TUI probes /api/info" "$q2"
+
+# The TUI *argv* differs by generation too, not just the probe. v2 deleted the
+# `attach` subcommand: the TUI is the root command and takes --server plus an
+# optional [directory] positional. If v2 ever regressed to `attach`, opencode
+# would print "unknown command" only once the container is already up.
+case "$t1" in *"opencode attach"*) a1=0 ;; *) a1=1 ;; esac
+case "$t2" in *"opencode attach"*) a2=1 ;; *) a2=0 ;; esac
+case "$t2" in *'opencode --server'*) a3=0 ;; *) a3=1 ;; esac
+check "v1 TUI attaches via 'opencode attach'" "$a1"
+check "v2 TUI does not use the removed 'attach' subcommand" "$a2"
+check "v2 TUI connects via root-command --server" "$a3"
 rm -rf "$DIFF_HOME"
 unset PLAN_HOME
 
@@ -533,12 +559,46 @@ fi
 # zellij pane faster than it could render, so the counter looked absent rather
 # than reporting an error. Every `continue` must be preceded by a sleep.
 echo
+echo "SELinux exec grants"
+# This suite MUST exec the entrypoints directly. An earlier revision ran them as
+# `bash "$EXEC"`, which only needs read permission, so a missing `execute` /
+# `execute_no_trans` grant on the labelled source tree was invisible here while
+# `just fortress-plan` failed on the host. The same reasoning had already
+# downgraded the exec-bit probe at the end of this file to a git-mode check.
+#
+# plan() and friends now do the real execve, but a policy regression would make
+# every downstream check fail with an unrelated message. This probe runs first
+# and names the actual cause. It has to live inside the repo: a probe in /tmp is
+# labelled tmpfs_t, which was always executable, so it would prove nothing.
+_exec_probe_dir=$(mktemp -d ./.selinux-exec-probe.XXXXXX 2>/dev/null || true)
+if [ -n "$_exec_probe_dir" ]; then
+  # Clean up on interrupt as well as on the normal path: an aborted suite would
+  # otherwise leave an untracked directory in the source tree (git tracks files,
+  # not empty dirs, so the dir is only visible once probe.sh is written).
+  trap 'rm -rf "$_exec_probe_dir"' EXIT INT TERM
+  printf '#!/bin/bash\nexit 0\n' >"$_exec_probe_dir/probe.sh"
+  chmod 755 "$_exec_probe_dir/probe.sh"
+  if "$_exec_probe_dir/probe.sh" >/dev/null 2>&1; then
+    pass "shebang script in the source tree execs (execute + execute_no_trans)"
+  else
+    fail "cannot exec a script inside the labelled source tree" \
+      "Reload the policy, then re-run: just fortress-selinux-cil v1 && sudo semodule -i apps/fortress/selinux/v1/selinux-fortress.cil"
+  fi
+  rm -rf "$_exec_probe_dir"
+  trap - EXIT INT TERM
+else
+  fail "could not create the exec probe in the source tree"
+fi
+
+echo
 echo "credits HUD throttle"
 CREDITS="$FORTRESS_DIR/fortress-credits"
 
-# Checked against git's recorded mode rather than `test -x`: the checkout's
-# exec bit is what lands on the user's machine, and a filesystem probe gives a
-# false negative wherever SELinux denies exec on the labelled source tree.
+# Two independent facts, checked two ways. git mode 100755 is the bit that
+# lands in a fresh clone; the exec above is what actually happens on this host.
+# An earlier revision probed only the git mode, citing "a false negative
+# wherever SELinux denies exec on the labelled source tree" -- that was the
+# policy bug being hidden rather than reported.
 check "fortress-credits is executable (git mode 100755)" \
   "$(git ls-files -s -- apps/fortress/fortress-credits | grep -q '^100755 ' && echo 0 || echo 1)"
 check "every continue is preceded by a sleep" \
