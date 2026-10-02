@@ -33,30 +33,112 @@ BUILDAH="${REPO_ROOT}/apps/opencode/buildah-build.sh"
 
 
 # ---------------------------------------------------------------------------
+# oc_generation_defaults()
+#
+# Description: fills in the per-generation defaults. Every version literal for
+#   a generation lives here and nowhere else -- the binary-variant pin, the
+#   resolve_version() fallback, and the OPENCODE_TAG the build falls back to
+#   all read OC_DEFAULT_VERSION from this one table.
+#
+#   The two generations are not interchangeable upstream. Every v1 tag declares
+#   "packageManager": "bun@1.3.14" and every v2 tag "bun@1.4.2", and both
+#   enforce it in packages/script/src/index.ts. Note that guard relaxes the pin
+#   to a caret range ("relax version requirement", verified at v2.0.22) and
+#   tests semver.satisfies(bun, "^<declared>"), so ^1.3.14 ACCEPTS bun 1.4.2 --
+#   it cannot be relied on to keep a v1 tree off a v2 toolchain. Do not go
+#   probing that pairing; per the repo owner it builds and then crashes at
+#   runtime. buildah-build.sh therefore asserts the tag's own packageManager
+#   against the image it picked (see assert_bun_matches_tag there), and this
+#   table is what it checks.
+# Globals:
+#   OPENCODE_API (string): generation; must already be set and validated
+# Outputs:
+#   Exports OC_DEFAULT_VERSION (string): pinned fallback for the generation
+# Returns:
+#   Exits 1 on an unknown OPENCODE_API
+# ---------------------------------------------------------------------------
+oc_generation_defaults() {
+  case "${OPENCODE_API}" in
+    v1) OC_DEFAULT_VERSION="1.18.34" ;;
+    v2) OC_DEFAULT_VERSION="2.0.22" ;;
+    *)
+      error "Error: Unknown OPENCODE_API '${OPENCODE_API}' (expected v1 or v2)."
+      exit 1
+      ;;
+  esac
+  export OC_DEFAULT_VERSION
+}
+
+
+# ---------------------------------------------------------------------------
+# latest_v2_tag()
+#
+# Description: newest v2 version, as a bare semver string with no v prefix.
+#   v2 tags never appear in the GitHub releases endpoint -- releases/latest
+#   tracks v1 (1.18.34) and releases/tags/v2.x.y is a 404, because no
+#   workflow creates a Release for a v2 tag. The npm opencode-ai launcher is
+#   no help either: its latest dist-tag is still 1.18.34, since v2 ships as
+#   @opencode/cli-*. So the tag list itself is the only generation-aware
+#   source. Read via ls-remote (no API token, no rate limit); peeled ^{}
+#   refs are dropped and non-release tags (0.0.0-*, -rc*) are filtered so the
+#   semver sort cannot pick one up.
+# Outputs:
+#   Prints the version to stdout; empty if the lookup fails
+# ---------------------------------------------------------------------------
+latest_v2_tag() {
+  git ls-remote --tags https://github.com/anomalyco/opencode.git 'v2.*' 2>/dev/null |
+    sed 's#.*refs/tags/##' |
+    grep -v '\^{}' |
+    grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' |
+    sort -V |
+    tail -1 |
+    sed 's/^v//'
+}
+
+
+# ---------------------------------------------------------------------------
 # resolve_version()
 #
-# Description: resolves and exports LATEST_VERSION (upstream stable release)
-#   and RESOLVED_HASH (short commit hash of OPENCODE_TAG / that version).
-#   LATEST_VERSION falls back to 1.17.0 if the GitHub API is unreachable;
-#   RESOLVED_HASH tries the peeled tag, the plain tag, then HEAD.
+# Description: resolves and exports LATEST_VERSION (upstream stable release for
+#   the active generation) and RESOLVED_HASH (short commit hash of
+#   OPENCODE_TAG / that version).
+#
+#   v1 resolves through the GitHub releases endpoint. v2 cannot -- see
+#   latest_v2_tag() -- so it sorts the tag list instead. Either way
+#   LATEST_VERSION falls back to OC_DEFAULT_VERSION (the generation's pinned
+#   release) when the lookup fails, so an unreachable network degrades to the
+#   newest version we have actually validated rather than to a stale one.
+#
+#   RESOLVED_HASH tries the peeled tag, the plain tag, then HEAD. The peeled
+#   form is what an annotated tag needs (v1.18.34 is one, v2.0.22 is not).
 # Globals:
 #   LATEST_VERSION (string): set if empty; exported for buildah-build.sh
 #   RESOLVED_HASH (string): set if empty; exported for buildah-build.sh
 #   OPENCODE_TAG (string): optional; read only for hash resolution
+#   OC_DEFAULT_VERSION (string): per-generation fallback; see
+#       oc_generation_defaults()
 # Outputs:
 #   Exports LATEST_VERSION and RESOLVED_HASH
 # ---------------------------------------------------------------------------
 resolve_version() {
   if [ -z "${LATEST_VERSION:-}" ]; then
-    info "==> Querying upstream repository for latest stable release tag..."
-    LATEST_VERSION=$(curl -s "https://api.github.com/repos/anomalyco/opencode/releases/latest" |
-      jq -r .tag_name | sed 's/^v//' || true)
+    case "${OPENCODE_API}" in
+      v1)
+        info "==> Querying upstream repository for latest stable release tag..."
+        LATEST_VERSION=$(curl -s "https://api.github.com/repos/anomalyco/opencode/releases/latest" |
+          jq -r .tag_name | sed 's/^v//' || true)
+        ;;
+      *)
+        info "==> Querying upstream repository for latest v2 tag..."
+        LATEST_VERSION=$(latest_v2_tag)
+        ;;
+    esac
 
     if [ -z "$LATEST_VERSION" ]; then
-      warn " Could not fetch dynamic tags. Falling back to core engine default baseline..."
-      LATEST_VERSION="1.17.0"
+      warn " Could not fetch dynamic tags. Falling back to pinned baseline v${OC_DEFAULT_VERSION}..."
+      LATEST_VERSION="${OC_DEFAULT_VERSION}"
     else
-      ok " Found current production release version: ${LATEST_VERSION}"
+      ok " Found current ${OPENCODE_API} release version: ${LATEST_VERSION}"
     fi
   fi
 
@@ -86,16 +168,18 @@ resolve_version() {
 #   STACK/SRC/TAIL dimensions and a default OPENCODE_TAG for binary builds.
 #   It also resolves OPENCODE_API, which is orthogonal to the variant name:
 #   the API generation picks the v1/v2 config, SELinux policy and launcher
-#   wiring, not a different build. v1 is the default and the only fully
-#   wired generation; v2 exists as a reachable seam.
+#   wiring, not a different build. v2 is the default; v1 stays selectable and
+#   shares this pipeline, it just resolves its own version/bun/channel.
 # Args:
 #   $1  variant_name (string): "" | full | binary | full-binary | basic |
 #       basic-binary
 # Globals:
-#   OPENCODE_TAG (string): set to v1.18.33 for binary variants when unset
-#   OPENCODE_API (string): set to v1 when unset
+#   OPENCODE_TAG (string): set to v<OC_DEFAULT_VERSION> for binary variants
+#       when unset
+#   OPENCODE_API (string): set to v2 when unset
 # Outputs:
-#   Exports STACK, SRC, TAIL, OPENCODE_TAG and OPENCODE_API
+#   Exports STACK, SRC, TAIL, OPENCODE_TAG, OPENCODE_API and
+#       OC_DEFAULT_VERSION
 # Returns:
 #   Exits 1 on unknown variant names or unknown OPENCODE_API values
 # ---------------------------------------------------------------------------
@@ -110,7 +194,6 @@ set_variant() {
       STACK="full"
       SRC="binary"
       TAIL="full-binary"
-      OPENCODE_TAG="${OPENCODE_TAG:-v1.18.33}"
       ;;
     basic)
       STACK="basic"
@@ -121,7 +204,6 @@ set_variant() {
       STACK="basic"
       SRC="binary"
       TAIL="basic-binary"
-      OPENCODE_TAG="${OPENCODE_TAG:-v1.18.33}"
       ;;
     *)
       error "Error: Unknown publish variant '$1' (expected full, full-binary, basic, basic-binary)."
@@ -129,7 +211,9 @@ set_variant() {
       ;;
   esac
 
-  OPENCODE_API="${OPENCODE_API:-v1}"
+  # Resolve the generation BEFORE the pin: the pin is per-generation, so it has
+  # to come out of the same table every other default does.
+  OPENCODE_API="${OPENCODE_API:-v2}"
   case "${OPENCODE_API}" in
     v1 | v2) ;;
     *)
@@ -137,9 +221,17 @@ set_variant() {
       exit 1
       ;;
   esac
+  oc_generation_defaults
+
+  # The pin is a sanity guard against a moved/renamed tag: binary variants
+  # download that exact release rather than whatever LATEST_VERSION resolved
+  # to. Source variants are unaffected -- they build the resolved tag.
+  if [ "${SRC}" = binary ]; then
+    OPENCODE_TAG="${OPENCODE_TAG:-v${OC_DEFAULT_VERSION}}"
+  fi
 
   export STACK SRC TAIL OPENCODE_TAG OPENCODE_API
-  info "==> Variant: stack=${STACK} src=${SRC} api=${OPENCODE_API} tail=${TAIL:-latest}"
+  info "==> Variant: stack=${STACK} src=${SRC} api=${OPENCODE_API} tag=${OPENCODE_TAG:-resolved} tail=${TAIL:-latest}"
 }
 
 

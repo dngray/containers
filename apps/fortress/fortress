@@ -67,8 +67,10 @@ MODE=${2:-"opencode"}
 # opencode-only image variant (tag suffix): latest | full-binary | basic-binary
 VARIANT=${3:-"latest"}
 # opencode-only API generation: v1 | v2. Orthogonal to the variant; the
-# positional argument wins over $OPENCODE_API.
-API=${4:-"${OPENCODE_API:-v1}"}
+# positional argument wins over $OPENCODE_API. v2 is the default because that is
+# what the build pipeline produces by default (apps/opencode/buildah-build.sh
+# generation table); pass "v1" to keep a legacy seat on a v1 image.
+API=${4:-"${OPENCODE_API:-v2}"}
 
 usage() {
   echo "Usage: fortress <path> [aider|goose|opencode] [latest|full-binary|basic-binary] [v1|v2]"
@@ -126,13 +128,14 @@ fi
 export REL_PATH
 
 # ---------------------------------------------------------------------------
-# 3. v2 capability check
+# 3. API capability check
 #
-# v2 is plumbed through the build, config and SELinux policy, but no v2 image
-# is published yet. Rather than refusing unconditionally, probe for a usable
-# image so the check self-clears the moment one is built. This must run before
-# the pod is created and before any secret is fetched, so the failure is a
-# message rather than a broken seat.
+# Probes for a usable image and fails early with a message instead of starting
+# a seat that cannot come up. This runs before the pod is created and before
+# any secret is fetched, so the failure is a message rather than a broken seat.
+# It self-clears the moment an image is built, and it now guards the DEFAULT
+# generation (v2), not just the experimental one -- which is why the advice
+# names the real recipes.
 # ---------------------------------------------------------------------------
 if [ "$API" = "v2" ]; then
   F_VARIANT=$VARIANT
@@ -144,7 +147,8 @@ if [ "$API" = "v2" ]; then
   if ! podman image exists "$IMAGE_REF" 2>/dev/null &&
     ! podman manifest inspect "$IMAGE_REF" >/dev/null 2>&1; then
     error "Opencode API 'v2' is not available: no image '$IMAGE_REF'."
-    info "Build it with 'just opencode-build v2' or use v1."
+    info "Build it with 'just opencode-layers && just opencode-server && just opencode-tui',"
+    info "or select the legacy generation with OPENCODE_API=v1 (or a trailing 'v1' argument)."
     exit 1
   fi
   ok "v2 image found: $IMAGE_REF"

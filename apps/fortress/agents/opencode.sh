@@ -19,6 +19,12 @@ server | tui) ;;
   ;;
 esac
 
+# Generation selector. `fortress` exports it and `just` always sets it, but
+# fortress-exec is also a documented standalone entrypoint for restarting a
+# single in-pane seat -- resolve it here as well, or the seat dies on `set -u`
+# before it can pick a port. v2 is the default; v1 stays selectable.
+OPENCODE_API="${OPENCODE_API:-v2}"
+
 # Both roles share the pod; the server pane starts first and the TUI waits.
 # Skipped under --print-plan: planning is meant to work before the first
 # launch, and it must not need podman on PATH just to render an argv.
@@ -90,14 +96,21 @@ else
   # host-side probe cannot see a loopback-only listener. 60s budget, then
   # proceed anyway so the attach surfaces its own error (fortress-probe parity).
   #
-  # The v1 and v2 differences are confined to $PORT and $PROBE_PATH; everything
-  # else about the seat is identical.
+  # v2 deleted the `attach` subcommand: the TUI is now the ROOT command and
+  # takes --server plus an optional [directory] positional (confirmed against
+  # `opencode --help` for 2.0.22). v1 keeps `attach ... --dir`. The password is
+  # read from the environment in both, since neither generation has a flag for
+  # it on the TUI side.
+  case "${OPENCODE_API}" in
+    v1) F_ATTACH="exec opencode attach \"${SERVER_URL}\" --password \"\${OPENCODE_SERVER_PASSWORD}\" --dir ." ;;
+    v2) F_ATTACH="exec opencode --server \"${SERVER_URL}\" ." ;;
+  esac
   F_CMD=(-ec "
     deadline=\$((SECONDS + 60))
     until curl -fs -u \"${F_SERVER_USERNAME}:\${OPENCODE_SERVER_PASSWORD}\" -o /dev/null --max-time 2 \"${SERVER_URL}${PROBE_PATH}\"; do
       [ \"\$SECONDS\" -ge \"\$deadline\" ] && break
       sleep 0.5
     done
-    exec opencode attach \"${SERVER_URL}\" --password \"\${OPENCODE_SERVER_PASSWORD}\" --dir .
+    ${F_ATTACH}
   ")
 fi

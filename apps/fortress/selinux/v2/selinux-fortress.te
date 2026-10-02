@@ -107,12 +107,24 @@ allow fortress_agent_t fortress_src_t:dir { manage_dir_perms relabelfrom relabel
 # and exec it there. So this raises the cost of running a planted binary rather
 # than preventing it. Narrowing the cache/tmpfs execute perms -- not this rule
 # -- is the change that would actually close that path.
-allow fortress_agent_t fortress_src_t:file { manage_file_perms relabelfrom relabelto map ioctl execute };
+#
+# `execute_no_trans` is required IN ADDITION to `execute`, not instead of it.
+# The type_transition rules above cover :dir only -- there is no transition on
+# fortress_src_t:file -- so a process that execs one STAYS in fortress_agent_t
+# and SELinux then demands execute_no_trans. Without it the exec gets as far as
+# the kernel's binfmt_script handler and then fails to exec the shebang
+# interpreter, surfacing as `bad interpreter: Permission denied` plus an AVC
+# `denied { execute_no_trans }`. That is what broke `just fortress-plan`, which
+# runs ./apps/fortress/fortress-exec directly. tmpfs_t:file below already got
+# this right; these two rules did not.
+allow fortress_agent_t fortress_src_t:file { manage_file_perms relabelfrom relabelto map ioctl execute execute_no_trans };
 allow fortress_agent_t fortress_src_t:lnk_file { manage_lnk_file_perms relabelfrom relabelto };
 
 # Needed so uv can execute compiled wheels/binaries inside persistent cache folder
 allow fortress_agent_t fortress_cache_t:dir { manage_dir_perms relabelfrom relabelto };
-allow fortress_agent_t fortress_cache_t:file { manage_file_perms relabelfrom relabelto map ioctl execute };
+# Same execute_no_trans requirement as fortress_src_t:file above: line 36
+# transitions :dir only, so exec'ing a cached binary stays in fortress_agent_t.
+allow fortress_agent_t fortress_cache_t:file { manage_file_perms relabelfrom relabelto map ioctl execute execute_no_trans };
 allow fortress_agent_t fortress_cache_t:lnk_file { manage_lnk_file_perms };
 
 # Fortress config persistence — read/write with map for mmap-based tools

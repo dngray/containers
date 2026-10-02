@@ -314,7 +314,7 @@ fortress-selinux-diff:
 
 # Print the resolved seat plan without launching anything
 [group('agents')]
-fortress-plan agent="opencode" role="server" variant="latest" api="v1":
+fortress-plan agent="opencode" role="server" variant="latest" api="v2":
     FORTRESS_PATH="{{justfile_directory()}}" OPENCODE_VARIANT="{{variant}}" OPENCODE_API="{{api}}" \
       ./apps/fortress/fortress-exec {{agent}} {{role}} --print-plan
 
