@@ -21,7 +21,7 @@
 #   ocbin-binary  <hash>            pinned upstream, sha256-verified release
 #   pgassets      <PGVER>           pgclient + pgvector (payload staging dir)
 #   rusttools     latest            lean-ctx built from crates.io
-#   gobin         latest            Go CLI tools (yq, gomplate) + hadolint release binary
+#   gobin         latest            Go CLI tools (yq, gomplate, age) + hadolint release binary
 #   uvbin         latest            uv / uvx binaries on a scratch rootfs
 #   mcp           latest            MCP/LSP tools payload in /home/opencode/.local
 #   ansible       latest            pinned uv-managed ansible-core + Galaxy
@@ -95,7 +95,8 @@
 #             default nproc),
 #             PYTHON_VERSION (default 3.14.7), PGVECTOR_VERSION (default 0.8.2),
 #             HADOLINT_VERSION (default v2.15.1), GOMPLATE_VERSION (default
-#             v5.2.0), NO_PUSH=1 (commit locally without registry push)
+#             v5.2.0), AGE_VERSION (default v1.3.2, covers age + age-keygen +
+#             age-plugin-batchpass), NO_PUSH=1 (commit locally without push)
 #
 # ---------------------------------------------------------------------------
 # Notes
@@ -148,6 +149,14 @@ PYVER="${PYTHON_VERSION:-3.14.7}"
 PGVER="${PGVECTOR_VERSION:-0.8.2}"
 HADOLINT_VERSION="${HADOLINT_VERSION:-v2.15.1}"
 GOMPLATE_VERSION="${GOMPLATE_VERSION:-v5.2.0}"
+# age, age-keygen and age-plugin-batchpass all live in the ONE module
+# filippo.io/age -- the plugin is cmd/age-plugin-batchpass inside the same
+# repo/tag, not a separate module -- so a single pin covers all three and
+# version skew between them is impossible. Pinned rather than @latest for the
+# same reason gomplate is: a floating age would silently change the agent's
+# crypto under an unchanged :latest layer tag. @latest currently resolves to
+# v1.3.2, so pinning it changes nothing today.
+AGE_VERSION="${AGE_VERSION:-v1.3.2}"
 BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
 
 # Ansible validation environment. Pinned rather than floating: the agent uses
@@ -981,9 +990,13 @@ build_rusttools() {
 #   DL (string): host dir holding the hadolint release download
 #   HADOLINT_VERSION (string): hadolint release tag, default v2.15.1
 #   GOMPLATE_VERSION (string): gomplate release tag, default v5.2.0
+#   AGE_VERSION (string): age module tag, default v1.3.2. One pin covers age,
+#     age-keygen and age-plugin-batchpass -- all three main packages live in
+#     the same filippo.io/age module
 #   GOBIN_IMG (string): image name committed when complete
 # Outputs:
-#   Commits ${GOBIN_IMG} with /usr/local/bin/{yq,gomplate,hadolint}
+#   Commits ${GOBIN_IMG} with
+#     /usr/local/bin/{yq,gomplate,hadolint,age,age-keygen,age-plugin-batchpass}
 # ---------------------------------------------------------------------------
 build_gobin() {
   local container hadolint_asset hadolint_dir
@@ -1019,6 +1032,28 @@ build_gobin() {
       github.com/hairyhenderson/gomplate/v5/cmd/gomplate@${GOMPLATE_VERSION}
     yq --version
     gomplate --version | grep -q \"${GOMPLATE_VERSION}\"
+    # age + age-keygen + age-plugin-batchpass, all from the one pinned module.
+    # The --version greps need no ldflags here because 'go install pkg@ver'
+    # stamps debug.ReadBuildInfo().Main.Version, which is exactly what both
+    # main packages print (unlike gomplate, whose stamp is a goreleaser one).
+    # (No backticks in this comment: it lives inside a double-quoted argument,
+    # so any would be command substitution in the HOST shell, not a comment.)
+    go install filippo.io/age/cmd/age@${AGE_VERSION}
+    go install filippo.io/age/cmd/age-keygen@${AGE_VERSION}
+    go install filippo.io/age/cmd/age-plugin-batchpass@${AGE_VERSION}
+    age --version | grep -q \"${AGE_VERSION}\"
+    age-keygen --version | grep -q \"${AGE_VERSION}\"
+    # The plugin is resolved BY NAME ON PATH (age searches PATH for
+    # age-plugin-<name>), which no --version can prove, so the exec bit and
+    # PATH-reachability are asserted directly and then exercised end to end.
+    # Without this roundtrip a plugin that installed fine but is unreachable
+    # would pass every check above and fail only in production. Work factor 1
+    # keeps scrypt instant at build time.
+    test -x /usr/local/bin/age-plugin-batchpass
+    printf probe | AGE_PASSPHRASE=testpass AGE_PASSPHRASE_WORK_FACTOR=1 \
+      age -e -j batchpass > /tmp/age-probe.age
+    AGE_PASSPHRASE=testpass age -d -j batchpass /tmp/age-probe.age | grep -q probe
+    rm -f /tmp/age-probe.age
   "
   buildah copy "$container" "${hadolint_dir}/hadolint" /usr/local/bin/hadolint
   buildah run "$container" -- chmod +x /usr/local/bin/hadolint
@@ -1421,6 +1456,13 @@ compose_server() {
   merge_payload "$container" "${GOBIN_IMG}" /usr/local/bin/yq /usr/local/bin/yq
   merge_payload "$container" "${GOBIN_IMG}" /usr/local/bin/gomplate /usr/local/bin/gomplate
   merge_payload "$container" "${GOBIN_IMG}" /usr/local/bin/hadolint /usr/local/bin/hadolint
+  merge_payload "$container" "${GOBIN_IMG}" /usr/local/bin/age /usr/local/bin/age
+  merge_payload "$container" "${GOBIN_IMG}" /usr/local/bin/age-keygen /usr/local/bin/age-keygen
+  # The plugin binary is NOT optional to the pair: age resolves it by name on
+  # PATH at call time, so an image carrying only `age` would fail every
+  # `age -j batchpass` (and every AGE_PASSPHRASE= script) with "plugin not
+  # found" rather than anything a version check could catch.
+  merge_payload "$container" "${GOBIN_IMG}" /usr/local/bin/age-plugin-batchpass /usr/local/bin/age-plugin-batchpass
   merge_payload "$container" "${MCP_IMG}" /home/opencode/.local /home/opencode/
   # pylsp's interpreter trees, contents-merged over the identical /opt pydex
   # already put here -- what makes jedi's default environment the pydex python
