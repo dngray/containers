@@ -32,3 +32,13 @@ systemd/aerc/aerc-ui.container
 systemd/snapclient/snapclient.container
 systemd/syncthing/syncthing1.container
 systemd/syncthing/syncthing2.container
+
+# Private documentation. Never commit these -- they are host-operational notes,
+# progress records and design discussion, not part of the shipped repo. This is
+# here so `git add -A` cannot sweep them in; being merely untracked was not
+# enough protection.
+docs/
+
+# Conventional-commit message for the owner to `git commit -F` from. Scratch,
+# never tracked.
+COMMIT_MSG.txt
