@@ -24,6 +24,10 @@ reproducibility.
 # Build the UI, sync, and Proton bridge images
 just aerc-build
 
+# Pin the upstream release instead of tracking the latest tag
+just aerc-build 0.22.0
+just aerc-build master
+
 # Start the pod (UI, sync, bridge) and open the TUI
 just aerc
 ```
