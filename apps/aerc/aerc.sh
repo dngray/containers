@@ -13,6 +13,7 @@ BRIDGE_VERSION="v3.26.0"
 resolve_version() {
   if [ -n "${AERC_VERSION:-}" ]; then
     LATEST_VERSION="${AERC_VERSION}"
+    info "==> Using pinned Aerc version: ${LATEST_VERSION}"
   else
     info "==> Querying upstream repository for latest stable release tag..."
 
