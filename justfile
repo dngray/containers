@@ -77,20 +77,20 @@ aerc:
 aerc-down:
     ./apps/aerc/aerc.sh stop
 
-# Build split Aerc UI, Mail-Sync, and Proton Bridge images
+# Build split Aerc UI, Mail-Sync, and Proton Bridge images (empty = latest upstream tag)
 [group('podman')]
-aerc-build:
-    ./apps/aerc/aerc.sh build
+aerc-build version="":
+    AERC_VERSION="{{version}}" ./apps/aerc/aerc.sh build
 
 # Remove Aerc system images and container structures
 [group('podman')]
 aerc-clean:
     ./apps/aerc/aerc.sh clean
 
-# Push Aerc UI, Mail-Sync, and Proton Bridge images to container registry
+# Push Aerc UI, Mail-Sync, and Proton Bridge images to container registry (empty = latest upstream tag)
 [group('podman')]
-aerc-publish:
-    ./apps/aerc/aerc.sh publish
+aerc-publish version="":
+    AERC_VERSION="{{version}}" ./apps/aerc/aerc.sh publish
 
 # Build split Aerc SELinux policy module (.cil)
 [group('selinux')]
