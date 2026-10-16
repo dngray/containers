@@ -96,7 +96,9 @@
 #             PYTHON_VERSION (default 3.15.0), PGVECTOR_VERSION (default 0.8.2),
 #             HADOLINT_VERSION (default v2.15.1), GOMPLATE_VERSION (default
 #             v5.2.0), AGE_VERSION (default v1.3.2, covers age + age-keygen +
-#             age-plugin-batchpass), NO_PUSH=1 (commit locally without push)
+#             age-plugin-batchpass), NO_PUSH=1 (commit locally without push),
+#             PUSH_CACHED=1 (also re-push layers already in the local cache;
+#             defaulted on by the layers route, honoured by ensure())
 #
 # ---------------------------------------------------------------------------
 # Notes
@@ -320,12 +322,22 @@ img_exists() {
 # Globals:
 #   BUILD_JOBS (int): parallelism, read for the build log line
 #   NO_PUSH (int): "1" commits locally without a registry push
+#   PUSH_CACHED (int): "1" also re-pushes a layer that was already in the
+#     local cache (set by default on the layers route; NO_PUSH wins)
 # Outputs:
 #   None directly; side effect is a new layer image and an optional push
 # ---------------------------------------------------------------------------
 ensure() {
   if img_exists "$2"; then
     ok " Layer ready: $1 ($2)"
+    # A cached layer used to be skipped whole, so anything built earlier
+    # with NO_PUSH=1 (or pruned from the registry) would never be
+    # republished. PUSH_CACHED=1 re-pushes the cached catalog; NO_PUSH
+    # still wins so a local-only run never touches the registry.
+    if [ "${PUSH_CACHED:-0}" = 1 ] && [ "${NO_PUSH:-0}" != 1 ]; then
+      buildah push "$2"
+      ok " Pushed layer: $2"
+    fi
   else
     info "==> Building layer: $1 ($2) [BUILD_JOBS=${BUILD_JOBS}]"
     "build_${1}"
@@ -1677,14 +1689,17 @@ usage() {
 
 # ---------------------------------------------------------------------------
 # Dispatch
-#   layers  - ensure all layer images for the variant (build + push missing)
+#   layers  - ensure all layer images for the variant (build what is missing,
+#             re-push the cached ones too; PUSH_CACHED defaults on here)
 #   server  - compose the opencode-server image only
 #   tui     - compose the opencode-tui image only
 #   build   - layers, then compose both finals (the publish path)
 # ---------------------------------------------------------------------------
 case "${1:-}" in
 layers)
-  ensure_all_layers "${STACK:-full}" "${SRC:-source}"
+  # Default PUSH_CACHED on so the layer catalog always ends up in the
+  # registry; opencode.sh sets PUSH_CACHED=0 for `opencode-layers local`.
+  PUSH_CACHED="${PUSH_CACHED:-1}" ensure_all_layers "${STACK:-full}" "${SRC:-source}"
   ;;
 server)
   compose_server "${STACK:-full}" "${SRC:-source}" "${TAIL:-}"
