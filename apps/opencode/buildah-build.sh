@@ -971,13 +971,15 @@ build_pgassets() {
 # Description: bootstraps rustup inside the container, clones lean-ctx and
 #   `cargo install`s it into /usr/local/bin. The only layer meant to be
 #   rebuilt when lean-ctx upstream moves.
-#   Why a clone instead of `cargo install lean-ctx`: upstream pins
-#   `zip = "8.6"` and every 8.6.x release is yanked on crates.io, so the
-#   published crate no longer resolves (cargo: "version 8.6.0 is yanked").
-#   The clone is patched before the build by appending a `[patch.crates-io]`
-#   entry that repins `zip` to the zip2 git tag (the tag survives even though
-#   the crates.io releases are yanked). Drop the clone for a plain
-#   `cargo install` once upstream ships a zip pin that resolves again.
+#   Why a clone instead of `cargo install lean-ctx`: the published crate still
+#   pins `zip = "8.6"` and the zip 8.x line is yanked on crates.io, so it no
+#   longer resolves (cargo: "version 8.6.0 is yanked"). Upstream `main` asks
+#   for `zip = "9.0.4"` (the PR #2096 fix), so the build clones `main` and
+#   repins `zip` to the zip2 git tag v9.0.4 via `[patch.crates-io]` -- kept on
+#   git rather than crates.io so a future yank cannot break the build. Once a
+#   9.0.4 build is confirmed working the repin can go back to the plain crate
+#   (9.0.4 is not yanked); the clone itself stays until a lean-ctx release
+#   ships the 9.0.4 pin.
 # Globals:
 #   BUILD_JOBS (int): CARGO_BUILD_JOBS + --jobs parallelism
 #   CACHE (string): host cache dir; apt debs bound at /mnt/host_cache
@@ -1003,10 +1005,10 @@ build_rusttools() {
   buildah run "$container" -- bash -ec "
     set -e
     . \$HOME/.cargo/env
-    git clone https://github.com/yvgude/lean-ctx.git /tmp/lean-ctx
+    git clone --branch main --single-branch https://github.com/yvgude/lean-ctx.git /tmp/lean-ctx
     cd /tmp/lean-ctx/rust
 
-    sed -i '/\\[patch\\.crates-io\\]/a zip = { git = \"https://github.com/zip-rs/zip2.git\", tag = \"v8.6.0\" }' Cargo.toml
+    sed -i '/\\[patch\\.crates-io\\]/a zip = { git = \"https://github.com/zip-rs/zip2.git\", tag = \"v9.0.4\" }' Cargo.toml
     cargo install --path . --root /usr/local --jobs ${BUILD_JOBS}
 
     cd /
