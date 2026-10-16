@@ -20,7 +20,9 @@
 #   ocbin-source  <hash>            opencode compiled from source (bun/turbo)
 #   ocbin-binary  <hash>            pinned upstream, sha256-verified release
 #   pgassets      <PGVER>           pgclient + pgvector (payload staging dir)
-#   rusttools     latest            lean-ctx built from crates.io
+#   rusttools     latest            lean-ctx built from a git clone of the
+#                                   upstream repo (zip dep repinned; see
+#                                   build_rusttools)
 #   gobin         latest            Go CLI tools (yq, gomplate, age) + hadolint release binary
 #   uvbin         latest            uv / uvx binaries on a scratch rootfs
 #   mcp           latest            MCP/LSP tools payload in /home/opencode/.local
@@ -966,9 +968,16 @@ build_pgassets() {
 # ---------------------------------------------------------------------------
 # build_rusttools()
 #
-# Description: bootstraps rustup inside the container and `cargo install`s
-#   lean-ctx into /usr/local/bin. The only layer meant to be rebuilt when
-#   lean-ctx upstream moves.
+# Description: bootstraps rustup inside the container, clones lean-ctx and
+#   `cargo install`s it into /usr/local/bin. The only layer meant to be
+#   rebuilt when lean-ctx upstream moves.
+#   Why a clone instead of `cargo install lean-ctx`: upstream pins
+#   `zip = "8.6"` and every 8.6.x release is yanked on crates.io, so the
+#   published crate no longer resolves (cargo: "version 8.6.0 is yanked").
+#   The clone is patched before the build by appending a `[patch.crates-io]`
+#   entry that repins `zip` to the zip2 git tag (the tag survives even though
+#   the crates.io releases are yanked). Drop the clone for a plain
+#   `cargo install` once upstream ships a zip pin that resolves again.
 # Globals:
 #   BUILD_JOBS (int): CARGO_BUILD_JOBS + --jobs parallelism
 #   CACHE (string): host cache dir; apt debs bound at /mnt/host_cache
@@ -994,7 +1003,14 @@ build_rusttools() {
   buildah run "$container" -- bash -ec "
     set -e
     . \$HOME/.cargo/env
-    cargo install lean-ctx --root /usr/local --jobs ${BUILD_JOBS}
+    git clone https://github.com/yvgude/lean-ctx.git /tmp/lean-ctx
+    cd /tmp/lean-ctx/rust
+
+    sed -i '/\\[patch\\.crates-io\\]/a zip = { git = \"https://github.com/zip-rs/zip2.git\", tag = \"v8.6.0\" }' Cargo.toml
+    cargo install --path . --root /usr/local --jobs ${BUILD_JOBS}
+
+    cd /
+    rm -rf /tmp/lean-ctx
   "
   buildah commit --rm "$container" "${RUST_IMG}"
 }
