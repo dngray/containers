@@ -93,7 +93,7 @@
 #   OPTIONAL  LATEST_VERSION, HOST_UID, HOST_GID (lib/cli.sh), STACK, SRC,
 #             TAIL, OPENCODE_API (v1 | v2, default v1), BUILD_JOBS (parallelism,
 #             default nproc),
-#             PYTHON_VERSION (default 3.14.7), PGVECTOR_VERSION (default 0.8.2),
+#             PYTHON_VERSION (default 3.15.0), PGVECTOR_VERSION (default 0.8.2),
 #             HADOLINT_VERSION (default v2.15.1), GOMPLATE_VERSION (default
 #             v5.2.0), AGE_VERSION (default v1.3.2, covers age + age-keygen +
 #             age-plugin-batchpass), NO_PUSH=1 (commit locally without push)
@@ -145,7 +145,10 @@ CACHE="${REPO_ROOT}/build/opencode/cache" # host-side build cache (source, tarba
 DL="${CACHE}/opencode_dl"                 # downloaded opencode release tarballs
 STAGE="${CACHE}/buildah_stage"            # scratch area for compose-time files
 
-PYVER="${PYTHON_VERSION:-3.14.7}"
+PYVER="${PYTHON_VERSION:-3.15.0}"
+PY_CERT_ID="hugo@python.org"
+PY_OIDC_ISSUER="https://github.com/login/oauth"
+
 PGVER="${PGVECTOR_VERSION:-0.8.2}"
 HADOLINT_VERSION="${HADOLINT_VERSION:-v2.15.1}"
 GOMPLATE_VERSION="${GOMPLATE_VERSION:-v5.2.0}"
@@ -216,25 +219,25 @@ ANSIBLE_COMMUNITY_GENERAL_VERSION="${ANSIBLE_COMMUNITY_GENERAL_VERSION:-13.4.0}"
 # ---------------------------------------------------------------------------
 OPENCODE_API="${OPENCODE_API:-v2}"
 case "${OPENCODE_API}" in
-  v1)
-    OC_DEFAULT_VERSION="1.18.34"
-    OC_CHANNEL="prod"
-    OC_BUN_IMAGE="docker.io/oven/bun:1.3.14-debian"
-    ;;
-  v2)
-    OC_DEFAULT_VERSION="2.0.22"
-    # MUST be a channel whose defaultPort() is 0xc0de (49374). service-config.ts
-    # returns 0xc0de only for latest|dev|beta|next and otherwise HASHES the
-    # channel name into 10000-59999, so baking v1's "prod" here would silently
-    # move the server off the port the SELinux policy labels and off the one
-    # the fortress probes.
-    OC_CHANNEL="latest"
-    OC_BUN_IMAGE="docker.io/oven/bun:1.4.2-debian"
-    ;;
-  *)
-    error "Error: Unknown OPENCODE_API '${OPENCODE_API}' (expected v1 or v2)."
-    exit 1
-    ;;
+v1)
+  OC_DEFAULT_VERSION="1.18.34"
+  OC_CHANNEL="prod"
+  OC_BUN_IMAGE="docker.io/oven/bun:1.3.14-debian"
+  ;;
+v2)
+  OC_DEFAULT_VERSION="2.0.22"
+  # MUST be a channel whose defaultPort() is 0xc0de (49374). service-config.ts
+  # returns 0xc0de only for latest|dev|beta|next and otherwise HASHES the
+  # channel name into 10000-59999, so baking v1's "prod" here would silently
+  # move the server off the port the SELinux policy labels and off the one
+  # the fortress probes.
+  OC_CHANNEL="latest"
+  OC_BUN_IMAGE="docker.io/oven/bun:1.4.2-debian"
+  ;;
+*)
+  error "Error: Unknown OPENCODE_API '${OPENCODE_API}' (expected v1 or v2)."
+  exit 1
+  ;;
 esac
 
 : "${OPENCODE_TAG:=v${LATEST_VERSION:-$OC_DEFAULT_VERSION}}"
@@ -381,8 +384,8 @@ ocbin_for() {
 # ---------------------------------------------------------------------------
 assert_bun_matches_tag() {
   local checkout_dir="$1" want declared
-  want=${OC_BUN_IMAGE##*:}   # 1.4.2-debian
-  want=${want%-debian}       # 1.4.2
+  want=${OC_BUN_IMAGE##*:} # 1.4.2-debian
+  want=${want%-debian}     # 1.4.2
   declared=$(jq -r '.packageManager // "" | split("@")[1] // ""' \
     "${checkout_dir}/package.json" 2>/dev/null || true)
 
@@ -392,14 +395,14 @@ assert_bun_matches_tag() {
     return 1
   fi
   case "$declared" in
-    "$want" | "$want".*) ;;
-    *)
-      error "bun toolchain mismatch: tag ${OPENCODE_TAG} declares packageManager bun@${declared}," \
-        "but generation ${OPENCODE_API} selects ${OC_BUN_IMAGE} (bun ${want})."
-      info "  Upstream's own ^${declared} guard accepts bun ${want}, so this would not be caught upstream."
-      info "  Build this tag with the bun it declares, or change OC_BUN_IMAGE in the generation table."
-      return 1
-      ;;
+  "$want" | "$want".*) ;;
+  *)
+    error "bun toolchain mismatch: tag ${OPENCODE_TAG} declares packageManager bun@${declared}," \
+      "but generation ${OPENCODE_API} selects ${OC_BUN_IMAGE} (bun ${want})."
+    info "  Upstream's own ^${declared} guard accepts bun ${want}, so this would not be caught upstream."
+    info "  Build this tag with the bun it declares, or change OC_BUN_IMAGE in the generation table."
+    return 1
+    ;;
   esac
   ok " bun toolchain matches tag: bun@${declared} (${OC_BUN_IMAGE})"
 }
@@ -503,7 +506,8 @@ build_tui_base() {
 #   VERIFIED release tarball (identity hugo@python.org, GitHub OIDC) with
 #   optimizations + LTO + experimental JIT, then commits. The tarball and
 #   provenance bundle are cached on the host so verification only happens
-#   once. Requires clang-19/llvm-19 for the JIT build. The run is root with
+#   once. Requires clang-21/llvm-21 for the JIT build (installed from
+#   apt.llvm.org, deb822 format). The run is root with
 #   HOME=/root exported inside it: the image env carries the agent's HOME, and
 #   a root run must never write into it (see the note in the body).
 # Globals:
@@ -532,7 +536,26 @@ build_pydex() {
     export HOME=/root
     apt-get update && apt-get install -y --no-install-recommends \
       build-essential libssl-dev zlib1g-dev libncurses5-dev libreadline-dev \
-      libsqlite3-dev liblzma-dev libffi-dev clang-19 llvm-19 llvm-19-dev
+      libsqlite3-dev liblzma-dev libffi-dev ca-certificates curl gnupg
+
+    # Python 3.15's experimental JIT (Tools/jit/build.py) hard-requires LLVM 21:
+    # it shells out to clang-21 plus llvm-objdump/llvm-readobj/llvm-dwarfdump,
+    # each resolved as <tool>-21 on PATH. Debian 13 only ships LLVM 19/20, so
+    # pull LLVM 21 from apt.llvm.org (deb822 source). The interpreter itself is
+    # still built with gcc (CC left untouched) -- only the JIT needs clang-21,
+    # so CPython's clang-only LTO/PGO checks for llvm-ar/llvm-profdata never run.
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /etc/apt/keyrings/llvm.gpg
+    chmod 644 /etc/apt/keyrings/llvm.gpg
+    tee /etc/apt/sources.list.d/llvm21.sources >/dev/null <<'EOF'
+Types: deb
+URIs: https://apt.llvm.org/trixie/
+Suites: llvm-toolchain-trixie-21
+Components: main
+Signed-By: /etc/apt/keyrings/llvm.gpg
+EOF
+    apt-get update && apt-get install -y --no-install-recommends \
+      clang-21 llvm-21
     python3 -m venv /opt/sigstore-venv
     /opt/sigstore-venv/bin/pip install sigstore
     if [ -f /mnt/host_cache/python_src/${python_tarball} ]; then
@@ -547,8 +570,8 @@ build_pydex() {
     cd /tmp
     /opt/sigstore-venv/bin/python3 -m sigstore verify identity \
       --bundle /tmp/${python_sigstore_bundle} \
-      --cert-identity hugo@python.org \
-      --cert-oidc-issuer https://github.com/login/oauth \
+      --cert-identity ${PY_CERT_ID} \
+      --cert-oidc-issuer ${PY_OIDC_ISSUER} \
       /tmp/${python_tarball}
     tar -xf /tmp/${python_tarball}
     cd /tmp/Python-${PYVER}
@@ -668,8 +691,8 @@ build_ocbin_source() {
 # ---------------------------------------------------------------------------
 ocbin_source_layout() {
   case "${OPENCODE_API}" in
-    v1) OC_SRC_OUT="packages/opencode/dist/opencode-linux-x64/bin/opencode" ;;
-    v2) OC_SRC_OUT="packages/cli/dist/cli-linux-x64/bin/opencode" ;;
+  v1) OC_SRC_OUT="packages/opencode/dist/opencode-linux-x64/bin/opencode" ;;
+  v2) OC_SRC_OUT="packages/cli/dist/cli-linux-x64/bin/opencode" ;;
   esac
 }
 
@@ -717,26 +740,26 @@ ocbin_source_layout() {
 # ---------------------------------------------------------------------------
 ocbin_source_install_cmds() {
   case "${OPENCODE_API}" in
-    v1)
-      printf '%s' "bun install --backend=copyfile --ignore-scripts --network-concurrency=1
+  v1)
+    printf '%s' "bun install --backend=copyfile --ignore-scripts --network-concurrency=1
     HUSKY=0 bun run --cwd packages/core fix-node-pty"
-      ;;
-    v2)
-      printf '%s' "bun install --frozen-lockfile --network-concurrency=1"
-      ;;
+    ;;
+  v2)
+    printf '%s' "bun install --frozen-lockfile --network-concurrency=1"
+    ;;
   esac
 }
 
 ocbin_source_build_cmds() {
   case "${OPENCODE_API}" in
-    v1)
-      printf '%s' "bun x turbo run build --filter=opencode --concurrency ${BUILD_JOBS} \\
+  v1)
+    printf '%s' "bun x turbo run build --filter=opencode --concurrency ${BUILD_JOBS} \\
       --env-mode=loose -- --single"
-      ;;
-    v2)
-      printf '%s' "bun run --cwd packages/cli script/build.ts \\
+    ;;
+  v2)
+    printf '%s' "bun run --cwd packages/cli script/build.ts \\
       --single --skip-install --outdir=dist"
-      ;;
+    ;;
   esac
 }
 
@@ -777,8 +800,8 @@ build_ocbin_binary() {
 
   if [ ! -x "${download_dir}/opencode" ]; then
     case "${OPENCODE_API}" in
-      v1) fetch_ocbin_v1 "${release_tag}" "${download_dir}" ;;
-      v2) fetch_ocbin_v2 "${release_tag}" "${download_dir}" ;;
+    v1) fetch_ocbin_v1 "${release_tag}" "${download_dir}" ;;
+    v2) fetch_ocbin_v2 "${release_tag}" "${download_dir}" ;;
     esac
   fi
   chmod +x "${download_dir}/opencode"
