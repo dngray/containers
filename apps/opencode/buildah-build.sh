@@ -184,10 +184,10 @@ BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
 # staged payload in compose_server) does not search. Dropping it costs 51MB and
 # that one stub; the collections the agent actually gets are the two baked
 # below.
-ANSIBLE_CORE_VERSION="${ANSIBLE_CORE_VERSION:-2.21.4}"
-ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION:-26.9.0}"
+ANSIBLE_CORE_VERSION="${ANSIBLE_CORE_VERSION:-2.22.0rc1}"
+ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION:-26.10.1}"
 ANSIBLE_POSIX_VERSION="${ANSIBLE_POSIX_VERSION:-2.2.2}"
-ANSIBLE_COMMUNITY_GENERAL_VERSION="${ANSIBLE_COMMUNITY_GENERAL_VERSION:-13.4.0}"
+ANSIBLE_COMMUNITY_GENERAL_VERSION="${ANSIBLE_COMMUNITY_GENERAL_VERSION:-13.5.0}"
 
 # ---------------------------------------------------------------------------
 # Per-generation constants.
