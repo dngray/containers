@@ -238,17 +238,32 @@ set_variant() {
 # ---------------------------------------------------------------------------
 # build_layers()
 #
-# Description: builds (and pushes) every layer image the active variant
-#   needs, without composing the finals.
+# Description: builds every layer image the active variant needs, without
+#   composing the finals, and leaves the whole layer catalog in the registry.
+#   A layer already in the local cache is reused as-is (no rebuild) but is
+#   still re-pushed, so the registry matches the cache. Pass "local" to
+#   skip the registry entirely (PUSH_CACHED=0); NO_PUSH=1 in the env
+#   suppresses pushes too.
 # Globals:
 #   VARIANT (string): optional; overrides the default (full/source) variant
+#   PUSH_CACHED (int): exported to buildah-build.sh as "1" (republish cached
+#     layers) by default, "0" when $1 is "local"
 # Outputs:
 #   Side effects: layer images present locally + pushed to registry
 # ---------------------------------------------------------------------------
 build_layers() {
+  local push_mode="${1:-}"
+  case "$push_mode" in
+  "") PUSH_CACHED=1 ;;
+  local) PUSH_CACHED=0 ;;
+  *)
+    error "Unknown layers argument '$push_mode' (expected: local)"
+    exit 2
+    ;;
+  esac
   set_variant "${VARIANT:-}"
   resolve_version
-  "${BUILDAH}" layers
+  PUSH_CACHED="${PUSH_CACHED}" "${BUILDAH}" layers
 }
 
 
@@ -341,7 +356,8 @@ distribute_images() {
 
 # ---------------------------------------------------------------------------
 # Dispatch
-#   layers    - layer images for the default variant (cache warm-up)
+#   layers    - layer images for the default variant (cache warm-up; re-pushes
+#               cached layers too, pass `local` to skip the registry)
 #   server    - compose server image only
 #   tui       - compose tui image only
 #   publish   - build+compose then distribute, passing the variant to buildah
@@ -349,7 +365,7 @@ distribute_images() {
 # ---------------------------------------------------------------------------
 case "${1:-}" in
 layers)
-  build_layers
+  build_layers "${2:-}"
   ;;
 
 server)
