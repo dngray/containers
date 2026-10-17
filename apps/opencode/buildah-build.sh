@@ -25,7 +25,8 @@
 #                                   build_rusttools)
 #   gobin         latest            Go CLI tools (yq, gomplate, age) + hadolint release binary
 #   uvbin         latest            uv / uvx binaries on a scratch rootfs
-#   mcp           latest            MCP/LSP tools payload in /home/opencode/.local
+#   mcp           latest            Python agent toolchain (ruff, ty) + MCP/LSP
+#                                   tools payload in /home/opencode/.local
 #   ansible       latest            pinned uv-managed ansible-core + Galaxy
 #                                   collections, staged in /ansible-layer
 #   devtools      latest            agent validation/debug toolchain, merged from
@@ -1141,12 +1142,16 @@ build_uvbin() {
 #   chowns it to the image's own `opencode` user; the whole .local tree is
 #   later merged into composed servers, which chown /home/opencode again.
 #   Includes: semble[mcp], code-index-mcp, repomix, bash-language-server,
-#   yaml-language-server, dockerfile-language-server, @ast-grep/cli, pyright,
-#   check-jsonschema, plus python-lsp-server installed INTO the pydex python
-#   (not a uv tool -- each uv tool below lands on the image's one Python via
-#   UV_PYTHON; pylsp must be that same interpreter, because jedi resolves
-#   against get_default_environment().executable, the interpreter RUNNING
-#   pylsp). Declares the uv tool/npm prefix env the tools need.
+#   yaml-language-server, dockerfile-language-server, @ast-grep/cli,
+#   check-jsonschema, plus ruff and ty installed INTO the pydex python with
+#   `uv pip install --system` rather than as uv tools: both are single-binary
+#   CLIs, and a plain install drops them straight into /opt/python-${PYVER}/bin
+#   -- first on PATH in the finals -- without a venv wrapper each. They are
+#   deliberately UNPINNED, like every other tool in this layer (semble,
+#   code-index-mcp, check-jsonschema, the npm globals): a new release only
+#   changes the lint/type diagnostics the agent sees, so tracking upstream is
+#   worth more than reproducibility here. Declares the uv tool/npm prefix env
+#   the tools need.
 #   Builds FROM pydex with UV_PYTHON pinned, so every uv tool here lands on the
 #   image's one Python instead of a uv-managed download of its own.
 # Globals:
@@ -1154,8 +1159,8 @@ build_uvbin() {
 #   MCP_IMG (string): image name committed when complete
 # Outputs:
 #   Commits ${MCP_IMG} with the populated /home/opencode/.local plus a staged
-#   /mcp-layer/opt (pylsp's interpreter trees) that compose_server contents-
-#   merges over the pydex /opt the finals already carry.
+#   /mcp-layer/opt (ruff/ty binaries + their dist-info) that compose_server
+#   contents-merges over the pydex /opt the finals already carry.
 # ---------------------------------------------------------------------------
 build_mcp() {
   local uv_container container
@@ -1188,25 +1193,19 @@ build_mcp() {
     set -e
     uv tool install --with mcp "semble[mcp]"
     uv tool install "code-index-mcp"
-    # pylsp is the exception to the uv tool rule: it goes into the pydex
-    # python ITSELF, not a tool env. jedi, its import engine, resolves against
-    # get_default_environment().executable -- the interpreter RUNNING pylsp,
-    # not whatever PATH first names -- so a tool-env pylsp reads a venv whose
-    # site-packages has neither jinja2 nor yaml, and no PYTHONPATH fix helps.
-    # uv, not pip, for the same reason build_ansible uses it: UV_PYTHON pins
-    # the target and that interpreter carries no PEP 668 marker. The assertion
-    # proves the mechanism rather than trusting PATH, and no tool-env copy is
-    # left behind to uninstall: this run never creates one.
-    uv pip install --system --python "$UV_PYTHON" "python-lsp-server"
-    # The which() check runs first: while a tool env is the regression, /opt
-    # carries no jedi yet, so importing jedi up front would report
-    # ModuleNotFoundError instead of the actual wrong location. It has to be
-    # PATH-scoped to the pydex bin dir: the build run inside this layer does
-    # carry the runtime PATH -- compose_server stops /opt/python-${PYVER}/bin
-    # first on the final image (os.path.dirname(sys.executable), since the
-    # assertion runs through UV_PYTHON), so a bare shutil.which() here scans
-    # pydex default PATH and finds nothing even on a correct install.
-    "$UV_PYTHON" -c "import os, shutil, sys, jedi; p=shutil.which(\"pylsp\", path=os.path.dirname(sys.executable)); assert p and p.startswith(\"/opt/python-\"), (\"pylsp on %r\" % p); e=jedi.api.environment.get_default_environment(); assert e.executable.startswith(\"/opt/python-\"), (\"jedi env %r\" % e.executable); print(\"pylsp OK\", p, e.executable)"
+    # ruff and ty go into the pydex python ITSELF, not a uv tool env. Both are
+    # single-binary CLIs (no Python import surface), and `uv pip install
+    # --system` lands them directly in the /opt/python-${PYVER}/bin the payload
+    # below stages -- the dir compose_server puts first on PATH -- with no venv
+    # wrapper each. uv, not pip, for the same reason build_ansible uses it:
+    # UV_PYTHON pins the target and that interpreter carries no PEP 668 marker.
+    # The which() check is PATH-scoped to that bin dir: the build run inside
+    # this layer already carries the runtime PATH, so a bare shutil.which()
+    # would be probed against the pydex default PATH instead of the dir the
+    # publishes, and would report a correct install as missing.
+    uv pip install --system --python "$UV_PYTHON" ruff
+    uv pip install --system --python "$UV_PYTHON" ty
+    "$UV_PYTHON" -c "import os, shutil, sys; d=os.path.dirname(sys.executable); p={t: shutil.which(t, path=d) for t in (\"ruff\", \"ty\")}; assert all(v and v.startswith(\"/opt/python-\") for v in p.values()), p; print(\"ruff/ty OK\", p)"
     npm install -g \
       --registry=https://registry.npmjs.org \
       --network-concurrency=8 \
@@ -1214,7 +1213,7 @@ build_mcp() {
       --fetch-timeout=300000 \
       repomix bash-language-server \
       yaml-language-server dockerfile-language-server-nodejs \
-      @ast-grep/cli pyright
+      @ast-grep/cli
     uv tool install "check-jsonschema"
     rm -rf /home/opencode/.npm /home/opencode/.cache
     chown -R opencode: /home/opencode/.local
@@ -1222,10 +1221,11 @@ build_mcp() {
   buildah run "$container" -- bash -ec "
     set -e
     mkdir -p /mcp-layer/opt/python-${PYVER}/lib/python${PYVER%.*}
-    # pylsp is installed into the pydex python (see the install run), so its
-    # site-packages and bin travel with the payload the same way the ansible
-    # layer's do. Left root-owned to match the /opt pydex already puts in the
-    # finals; the chown above covers /home/opencode only.
+    # ruff and ty are installed into the pydex python (see the install run), so
+    # their binaries land in the bin dir staged here and travel with the
+    # payload the same way the ansible layer's site-packages do. Left
+    # root-owned to match the /opt pydex already puts in the finals; the chown
+    # above covers /home/opencode only.
     cp -a /opt/python-${PYVER}/lib/python${PYVER%.*}/site-packages /mcp-layer/opt/python-${PYVER}/lib/python${PYVER%.*}/
     cp -a /opt/python-${PYVER}/bin /mcp-layer/opt/python-${PYVER}/
   "
@@ -1517,9 +1517,9 @@ compose_server() {
   # found" rather than anything a version check could catch.
   merge_payload "$container" "${GOBIN_IMG}" /usr/local/bin/age-plugin-batchpass /usr/local/bin/age-plugin-batchpass
   merge_payload "$container" "${MCP_IMG}" /home/opencode/.local /home/opencode/
-  # pylsp's interpreter trees, contents-merged over the identical /opt pydex
-  # already put here -- what makes jedi's default environment the pydex python
-  # for BOTH stacks (basic merges mcp too, just not pgassets/rusttools).
+  # ruff/ty's bin dir, contents-merged over the identical /opt pydex already
+  # put here -- what puts both CLIs on the interpreter tree both stacks share
+  # (basic merges mcp too, just not pgassets/rusttools).
   merge_payload "$container" "${MCP_IMG}" /mcp-layer/opt/. /opt
   # ansible payload, staged the same way as the mcp layer above. Both stacks
   # carry pydex now, so these venvs resolve and this is not full-only. Keeping

@@ -8,9 +8,9 @@
     }
   },
   "lsp": {
-    "python": {
-      "command": ["pylsp"],
-      "extensions": [".py"]
+    "ty": {
+      "command": ["ty", "server"],
+      "extensions": [".py", ".pyi"]
     },
     "bash": {
       "command": ["bash-language-server", "start"],
