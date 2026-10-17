@@ -18,6 +18,30 @@ The bridge is built **from source** (only trusting Proton's official
 `build/aerc-bridge/`), pinned to a specific upstream release for
 reproducibility.
 
+## PGP state (Sequoia)
+
+Both `aerc-ui` and `aerc-sync` run Sequoia's GnuPG shim as their `gpg`
+(`gpg-from-sq`; the images also ship `sq` and `sqop`). Two host directories are
+mounted read-write into both containers:
+
+- `~/.gnupg` — GnuPG state. `gpg-sq` delegates secret key operations to the
+  host `gpg-agent` (the agent sockets are passed through as well), so secret
+  key material never enters the container. `gpg-from-sq` only diverts
+  `/usr/bin/gpg` to `gpg-sq`; the rest of the real GnuPG stack stays installed
+  because `gopass` depends on `gnupg`. That suits everyone: `gopass` reaches
+  Sequoia through the diverted `gpg`, and chameleon still has the `gpgconf` it
+  needs to locate the agent's socket and the `gpg-agent` to start one.
+- `~/.local/share/pgp.cert.d` — Sequoia's certificate store, and the default
+  store for both `sq` and `gpg-sq` while `GNUPGHOME` stays at its default.
+
+`sq pki link add --cert <FPR> --email <EMAIL>` records a non-exportable
+certification in the certificate store, and that link is what makes aerc — and
+notmuch — treat a recipient's key as usable. Run it from aerc's `Ctrl+T` shell
+inside the container or on the host: it is the same store either way, and it
+survives container recreation. Because the type is already allowed by the
+policy (`data_home_t`), the mounts stay plain `:rw` — adding `:z`/`:Z` would
+relabel a store the host's own `sq`/`gpg-sq` also uses.
+
 ## Build & start
 
 ```bash
