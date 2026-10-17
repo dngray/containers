@@ -15,11 +15,13 @@ Exec=infinity
 
 # ── Read-Write Storage & Socket Mounts ──
 Volume=%h/.local/share/mail:/home/aerc/.local/share/mail:rw
+Volume=%h/.local/state/vdirsyncer:/home/aerc/.local/state/vdirsyncer:rw
 Volume=%h/.local/share/nvim:/home/aerc/.local/share/nvim:rw
 Volume=%h/.local/share/address-book:/home/aerc/.local/share/address-book:rw
 Volume=%h/.local/share/calendars:/home/aerc/.local/share/calendars:rw
 Volume=%h/Downloads:/home/aerc/Downloads:rw
 Volume=%h/.gnupg:/home/aerc/.gnupg:rw
+Volume=%h/.local/share/pgp.cert.d:/home/aerc/.local/share/pgp.cert.d:rw
 Volume=/run/user/%U/gnupg/S.gpg-agent:/home/aerc/.gnupg/S.gpg-agent:rw
 Volume=/run/user/%U/gnupg/S.gpg-agent.extra:/home/aerc/.gnupg/S.gpg-agent.extra:rw
 Volume=/run/pcscd/pcscd.comm:/run/pcscd/pcscd.comm:rw
