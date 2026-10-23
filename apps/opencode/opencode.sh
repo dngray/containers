@@ -40,16 +40,18 @@ BUILDAH="${REPO_ROOT}/apps/opencode/buildah-build.sh"
 #   resolve_version() fallback, and the OPENCODE_TAG the build falls back to
 #   all read OC_DEFAULT_VERSION from this one table.
 #
-#   The two generations are not interchangeable upstream. Every v1 tag declares
-#   "packageManager": "bun@1.3.14" and every v2 tag "bun@1.4.2", and both
-#   enforce it in packages/script/src/index.ts. Note that guard relaxes the pin
-#   to a caret range ("relax version requirement", verified at v2.0.22) and
-#   tests semver.satisfies(bun, "^<declared>"), so ^1.3.14 ACCEPTS bun 1.4.2 --
-#   it cannot be relied on to keep a v1 tree off a v2 toolchain. Do not go
-#   probing that pairing; per the repo owner it builds and then crashes at
-#   runtime. buildah-build.sh therefore asserts the tag's own packageManager
-#   against the image it picked (see assert_bun_matches_tag there), and this
-#   table is what it checks.
+#   Bun is not part of this table: each tag declares the bun it needs in its own
+#   package.json and buildah-build.sh derives the image from that declaration
+#   (oc_bun_image_for), so a future bun bump needs no edit here. That guard is
+#   the only pairing check upstream has, and it is weak -- it relaxes the pin to
+#   a caret range ("relax version requirement", verified at v2.0.22) and tests
+#   semver.satisfies(bun, "^<declared>"), so a v1 tree never rejects a newer
+#   toolchain. Per the repo owner, a v1 tree on bun 1.4 used to build and then
+#   crash at runtime; do not go probing that pairing. Following the tag's own
+#   declaration is what keeps every era correct (v1 up to 1.19.3 and v2 up to
+#   2.1.2 ask for 1.3.14/1.4.2; v1.19.4+ and v2.1.3+ ask for 1.4.4), and
+#   assert_bun_matches_tag in buildah-build.sh re-checks the checkout against
+#   the declaration that picked the image.
 # Globals:
 #   OPENCODE_API (string): generation; must already be set and validated
 # Outputs:
@@ -59,8 +61,8 @@ BUILDAH="${REPO_ROOT}/apps/opencode/buildah-build.sh"
 # ---------------------------------------------------------------------------
 oc_generation_defaults() {
   case "${OPENCODE_API}" in
-    v1) OC_DEFAULT_VERSION="1.18.34" ;;
-    v2) OC_DEFAULT_VERSION="2.0.22" ;;
+    v1) OC_DEFAULT_VERSION="1.19.4" ;;
+    v2) OC_DEFAULT_VERSION="2.1.4" ;;
     *)
       error "Error: Unknown OPENCODE_API '${OPENCODE_API}' (expected v1 or v2)."
       exit 1
@@ -75,9 +77,9 @@ oc_generation_defaults() {
 #
 # Description: newest v2 version, as a bare semver string with no v prefix.
 #   v2 tags never appear in the GitHub releases endpoint -- releases/latest
-#   tracks v1 (1.18.34) and releases/tags/v2.x.y is a 404, because no
+#   tracks v1 (1.19.4) and releases/tags/v2.x.y is a 404, because no
 #   workflow creates a Release for a v2 tag. The npm opencode-ai launcher is
-#   no help either: its latest dist-tag is still 1.18.34, since v2 ships as
+#   no help either: its latest dist-tag tracks v1 (1.19.4), since v2 ships as
 #   @opencode/cli-*. So the tag list itself is the only generation-aware
 #   source. Read via ls-remote (no API token, no rate limit); peeled ^{}
 #   refs are dropped and non-release tags (0.0.0-*, -rc*) are filtered so the
@@ -110,7 +112,8 @@ latest_v2_tag() {
 #   newest version we have actually validated rather than to a stale one.
 #
 #   RESOLVED_HASH tries the peeled tag, the plain tag, then HEAD. The peeled
-#   form is what an annotated tag needs (v1.18.34 is one, v2.0.22 is not).
+#   form is what an annotated tag needs (v1.18.34 was one; v1.19.4 and v2.1.4
+#   are lightweight, so they resolve on the plain-tag branch).
 # Globals:
 #   LATEST_VERSION (string): set if empty; exported for buildah-build.sh
 #   RESOLVED_HASH (string): set if empty; exported for buildah-build.sh
