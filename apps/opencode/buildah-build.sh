@@ -150,13 +150,13 @@ CACHE="${REPO_ROOT}/build/opencode/cache" # host-side build cache (source, tarba
 DL="${CACHE}/opencode_dl"                 # downloaded opencode release tarballs
 STAGE="${CACHE}/buildah_stage"            # scratch area for compose-time files
 
-PYVER="${PYTHON_VERSION:-3.15.0}"
+PYVER="${PYTHON_VERSION:-3.15.1}"
 PY_CERT_ID="hugo@python.org"
 PY_OIDC_ISSUER="https://github.com/login/oauth"
 
 PGVER="${PGVECTOR_VERSION:-0.8.2}"
 HADOLINT_VERSION="${HADOLINT_VERSION:-v2.15.1}"
-GOMPLATE_VERSION="${GOMPLATE_VERSION:-v5.2.0}"
+GOMPLATE_VERSION="${GOMPLATE_VERSION:-v5.3.1}"
 # age, age-keygen and age-plugin-batchpass all live in the ONE module
 # filippo.io/age -- the plugin is cmd/age-plugin-batchpass inside the same
 # repo/tag, not a separate module -- so a single pin covers all three and
@@ -1009,7 +1009,7 @@ build_rusttools() {
     git clone --branch main --single-branch https://github.com/yvgude/lean-ctx.git /tmp/lean-ctx
     cd /tmp/lean-ctx/rust
 
-    sed -i '/\\[patch\\.crates-io\\]/a zip = { git = \"https://github.com/zip-rs/zip2.git\", tag = \"v9.0.4\" }' Cargo.toml
+    sed -i '/\\[patch\\.crates-io\\]/a zip = { git = \"https://github.com/zip-rs/zip2.git\", tag = \"v9.0.5\" }' Cargo.toml
     cargo install --path . --root /usr/local --jobs ${BUILD_JOBS}
 
     cd /
