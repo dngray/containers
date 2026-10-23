@@ -40,9 +40,11 @@ legacy seat. The launcher probes for the selected generation's image before it
 creates the pod or fetches any secret, so an unbuilt generation fails with a
 message naming the build recipes rather than a half-started seat.
 
-The two generations are not interchangeable at build time: each upstream tag
-declares its own bun version (`1.3.14` on v1 tags, `1.4.2` on v2), and the build
-refuses to continue if the checked-out tag and the selected bun image disagree.
+The two generations share the build pipeline but each upstream tag declares the
+bun it needs (`1.3.14` on v1 tags up to 1.19.3, `1.4.4` from v1.19.4; `1.4.2` on
+v2 tags up to 2.1.2, `1.4.4` from 2.1.3). The build derives its bun image from
+that declaration and refuses to continue if the checked-out tag disagrees with
+the one that selected the toolchain.
 
 ## Fortress DB access
 

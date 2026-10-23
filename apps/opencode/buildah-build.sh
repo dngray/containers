@@ -198,52 +198,60 @@ ANSIBLE_COMMUNITY_GENERAL_VERSION="${ANSIBLE_COMMUNITY_GENERAL_VERSION:-13.5.0}"
 # Per-generation constants.
 #
 # The single source of truth for what differs between the v1 and v2 API
-# generations. Each generation's version literal lives here and nowhere else;
-# the OPENCODE_TAG fallback, the bun toolchain, the baked release channel and
-# both ocbin builders all read this table.
+# generations. The version fallback, the baked release channel and both ocbin
+# builders all read this table. opencode.sh exports OC_DEFAULT_VERSION from its
+# own copy of the same two literals; when it does, that value wins here, so the
+# literals below are only the defaults for invoking this script directly.
 #
-# OC_BUN_IMAGE is not a preference, it is a hard requirement. Every v1 tag
-# declares "packageManager": "bun@1.3.14" and every v2 tag "bun@1.4.2", and both
-# generations throw from packages/script/src/index.ts when the running bun
-# does not satisfy the declared range. Upstream's own CI agrees -- publish.yml
-# pins bun-version 1.4.2 for the v2 CLI build.
+# The bun toolchain is NOT part of this table: it is derived from the tag being
+# built (oc_bun_image_for below). Each upstream tag declares its own
+# "packageManager" bun pin and throws from packages/script/src/index.ts when the
+# running bun does not satisfy it, and that declaration moves -- 1.3.14 on v1
+# tags up to v1.19.3 and on every v2 tag up to v2.1.2, then 1.4.4 from v1.19.4
+# (upstream commit baec69b) and v2.1.3 (commit 37d9737). Deriving the image from
+# the tag means a future bun bump is picked up the moment a tag declares it,
+# with no edit here.
 #
-# Upstream's guard cannot catch a cross-generation pairing on its own. At
-# v2.0.22 it relaxes the declared pin to a caret range
-# (packages/script/src/index.ts, comment "relax version requirement") and
-# tests semver.satisfies(bun, "^<declared>"), so ^1.3.14 admits 1.4.2 -- a v1
-# tree does not reject the v2 toolchain.
-#
-# Do NOT go looking for that failure mode. Per the repo owner, building a v1
-# tree on bun 1.4+ runs to completion and then crashes at runtime with a
-# confusing error; that is their report from having hit it, not something
-# reproduced here, and reproducing it would cost a full build to learn nothing
-# this table cannot state. assert_bun_matches_tag() exists so the pairing is
-# checked up front instead of discovered at runtime: it compares the
-# checked-out tag's OWN declared pin against the image chosen here.
+# Two things upstream's own guard does NOT give us:
+#   * It relaxes the pin to a caret range at v2.0.22 (packages/script/src/
+#     index.ts, comment "relax version requirement") and tests
+#     semver.satisfies(bun, "^<declared>"), so a v1 tree does not reject a
+#     newer toolchain -- and per the repo owner a v1 tree built that way runs to
+#     completion and then crashes at runtime. Do NOT go probing that pairing; it
+#     costs a full build to re-learn something already observed.
+#   * package.json is only readable once the tree is checked out, which happens
+#     INSIDE the bun container -- far too late to choose the container.
+# So oc_bun_image_for() reads the declaration from the tag itself on the host
+# (raw.githubusercontent) and selects the image from it, and
+# assert_bun_matches_tag() re-checks the checked-out tree against the
+# declaration that chose the toolchain, so a tag ref that moved underneath us
+# fails the build instead of compiling with the wrong bun.
 # ---------------------------------------------------------------------------
 OPENCODE_API="${OPENCODE_API:-v2}"
 case "${OPENCODE_API}" in
 v1)
-  OC_DEFAULT_VERSION="1.18.34"
+  OC_DEFAULT_VERSION="${OC_DEFAULT_VERSION:-1.19.4}"
   OC_CHANNEL="prod"
-  OC_BUN_IMAGE="docker.io/oven/bun:1.3.14-debian"
   ;;
 v2)
-  OC_DEFAULT_VERSION="2.0.22"
+  OC_DEFAULT_VERSION="${OC_DEFAULT_VERSION:-2.1.4}"
   # MUST be a channel whose defaultPort() is 0xc0de (49374). service-config.ts
   # returns 0xc0de only for latest|dev|beta|next and otherwise HASHES the
   # channel name into 10000-59999, so baking v1's "prod" here would silently
   # move the server off the port the SELinux policy labels and off the one
   # the fortress probes.
   OC_CHANNEL="latest"
-  OC_BUN_IMAGE="docker.io/oven/bun:1.4.2-debian"
   ;;
 *)
   error "Error: Unknown OPENCODE_API '${OPENCODE_API}' (expected v1 or v2)."
   exit 1
   ;;
 esac
+
+# Offline floor only. Used when the tag's package.json cannot be fetched; the
+# post-checkout assert still decides whether that guess was right. Both pinned
+# baselines (v1.19.4, v2.1.4) declare bun@1.4.4.
+OC_BUN_FALLBACK="docker.io/oven/bun:1.4.4-debian"
 
 : "${OPENCODE_TAG:=v${LATEST_VERSION:-$OC_DEFAULT_VERSION}}"
 : "${RESOLVED_HASH:?resolve_version must run first}"
@@ -372,53 +380,95 @@ ocbin_for() {
 }
 
 # ---------------------------------------------------------------------------
+# oc_bun_version(<declaration>)
+#
+# Description: normalises a packageManager bun declaration to the bare x.y.z
+#   that oven/bun image tags use. Handles the "bun@1.4.4" form the tags publish
+#   today and the caret/range form upstream's relaxed guard allows
+#   ("bun@^1.4.2"), which reduces to its minimum -- the version upstream's own
+#   semver.satisfies() check would accept.
+# Args:
+#   $1  declaration (string): value of package.json "packageManager"
+# Returns:
+#   0 and prints x.y.z; 1 and prints nothing when it is not a usable pin
+# ---------------------------------------------------------------------------
+oc_bun_version() {
+  printf '%s\n' "${1#bun@}" |
+    sed -E 's/^[[:space:]]*[~^>=<]+//; s/[[:space:]].*$//' |
+    grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' || return 1
+}
+
+# ---------------------------------------------------------------------------
+# oc_bun_image_for(<tag>)
+#
+# Description: prints the bun image a tag asks for, read from that tag's own
+#   package.json on GitHub. This runs on the HOST and before any container
+#   exists, because the declaration lives in the tree we have not checked out
+#   yet and the container has to be created FROM the bun image the buildah run
+#   steps then use. Pinning a patch per generation here instead would go stale
+#   on every upstream bun bump and refuse tags that are buildable with the bun
+#   they name.
+# Args:
+#   $1  tag (string): git tag / ref to read
+# Globals:
+#   OC_BUN_FALLBACK (string): image used when the fetch or parse fails
+# Returns:
+#   0 with the tag-declared image on stdout; 1 with the fallback on stdout,
+#   so the caller can warn that the choice is a guess
+# ---------------------------------------------------------------------------
+oc_bun_image_for() {
+  local tag="$1" declared version
+  declared=$(curl -fsSL --max-time 20 \
+    "https://raw.githubusercontent.com/anomalyco/opencode/${tag}/package.json" 2>/dev/null |
+    jq -r '.packageManager // ""' 2>/dev/null || true)
+  version=$(oc_bun_version "$declared") || {
+    printf '%s' "${OC_BUN_FALLBACK}"
+    return 1
+  }
+  printf 'docker.io/oven/bun:%s-debian' "$version"
+}
+
+# ---------------------------------------------------------------------------
 # assert_bun_matches_tag(<checkout_dir>)
 #
-# Description: fails the build when the pinned tag's own bun declaration
-#   disagrees with the bun image the generation table selected. Reads
-#   packageManager straight out of the checked-out tree, so it validates the
-#   ACTUAL source about to be compiled rather than a remembered version.
-#
-#   Upstream's own guard cannot catch the pairing it looks like it catches: at
-#   v2.0.22, packages/script/src/index.ts relaxes the declared pin to a caret
-#   range ("relax version requirement") and tests
-#   semver.satisfies(bun, "^<declared>"), so ^1.3.14 is satisfied by bun 1.4.2
-#   and a v1 tree does not reject the v2 toolchain. Per the repo owner, such a
-#   build runs to completion and then crashes at runtime -- their report, not
-#   something reproduced here. Here it stops before the compile instead of after
-#   it.
-#
-#   Matched on the full x.y.z (a declared 1.4.2 accepts a 1.4.2.x image, not
-#   1.4.3), so a bun patch bump has to be a deliberate edit on both sides.
+# Description: fails the build when the bun declaration inside the checked-out
+#   tree disagrees with the declaration that selected OC_BUN_IMAGE. The image is
+#   chosen on the host from the tag's own package.json (oc_bun_image_for), which
+#   covers the normal path; this re-reads the ACTUAL source about to be compiled
+#   and catches what that choice cannot see -- a stale cached repo/ at another
+#   ref, a tag that moved, or a fallback image used because the host lookup
+#   failed.
 # Args:
 #   $1  checkout_dir (string): path to the checked-out opencode source tree
 # Globals:
-#   OC_BUN_IMAGE (string): image the generation table selected
+#   OC_BUN_IMAGE (string): image selected from the tag's declaration
+#   OC_BUN_SOURCE (string): "tag" | "fallback", for the diagnostic only
 # Outputs:
 #   Exits 1 with both versions named when they disagree
 # ---------------------------------------------------------------------------
 assert_bun_matches_tag() {
   local checkout_dir="$1" want declared
-  want=${OC_BUN_IMAGE##*:} # 1.4.2-debian
-  want=${want%-debian}     # 1.4.2
-  declared=$(jq -r '.packageManager // "" | split("@")[1] // ""' \
-    "${checkout_dir}/package.json" 2>/dev/null || true)
+  want=${OC_BUN_IMAGE##*:} # 1.4.4-debian
+  want=${want%-debian}     # 1.4.4
+  declared=$(jq -r '.packageManager // ""' "${checkout_dir}/package.json" 2>/dev/null || true)
+  declared=$(oc_bun_version "$declared" 2>/dev/null || true)
 
   if [ -z "$declared" ]; then
-    error "No packageManager field in ${checkout_dir}/package.json; cannot verify the bun toolchain."
+    error "No usable packageManager pin in ${checkout_dir}/package.json; cannot verify the bun toolchain."
     info "  A v2 tree under packages/opencode has moved; check the tag is not a v1/v2 mix."
     return 1
   fi
-  case "$declared" in
-  "$want" | "$want".*) ;;
-  *)
-    error "bun toolchain mismatch: tag ${OPENCODE_TAG} declares packageManager bun@${declared}," \
-      "but generation ${OPENCODE_API} selects ${OC_BUN_IMAGE} (bun ${want})."
-    info "  Upstream's own ^${declared} guard accepts bun ${want}, so this would not be caught upstream."
-    info "  Build this tag with the bun it declares, or change OC_BUN_IMAGE in the generation table."
+  if [ "$declared" != "$want" ]; then
+    error "bun toolchain mismatch: the checked-out tree declares bun@${declared}," \
+      "but the build selected ${OC_BUN_IMAGE} (bun ${want})."
+    if [ "${OC_BUN_SOURCE:-tag}" = fallback ]; then
+      info "  The tag's package.json could not be fetched, so OC_BUN_FALLBACK was used."
+    else
+      info "  The image was chosen from ref ${OPENCODE_TAG}'s package.json, so the tree in"
+      info "  ${CACHE}/opencode_src/repo is stale or at another ref. Remove it and rebuild."
+    fi
     return 1
-    ;;
-  esac
+  fi
   ok " bun toolchain matches tag: bun@${declared} (${OC_BUN_IMAGE})"
 }
 
@@ -607,22 +657,22 @@ EOF
 # ---------------------------------------------------------------------------
 # build_ocbin_source()
 #
-# Description: builds the opencode binary from the pinned git tag using the
-#   generation's pinned bun base image. The source tree and bun dependency
-#   cache live on the host so repeat runs are incremental (git fetch + no-op
-#   install).
+# Description: builds the opencode binary from the pinned git tag using the bun
+#   base image that tag declares. The source tree and bun dependency cache live
+#   on the host so repeat runs are incremental (git fetch + no-op install).
 #
-#   Three buildah run steps, not one, because the toolchain check has to land
-#   BETWEEN the checkout and the expensive part. The checkout lands in the host
-#   cache (bind-mounted), so assert_bun_matches_tag can read the tag's own
-#   package.json from here. Upstream's caret-range guard does not stop a
-#   cross-generation pairing, and per the repo owner such a build finishes and
-#   then crashes at runtime -- so no amount of log-reading after the fact fixes
-#   the twenty minutes it cost.
+#   Two toolchain steps, not one: the tag's packageManager is read on the host
+#   BEFORE the container exists (oc_bun_image_for -- the container is created
+#   FROM that bun image), then assert_bun_matches_tag re-reads the same field
+#   from the checked-out tree in the host cache. Splitting them is what catches
+#   a stale cached repo/ or a moved tag, which host-side selection alone cannot
+#   see; the assert still lands between the checkout and the twenty-minute
+#   compile.
 # Globals:
 #   OPENCODE_TAG (string): git tag to build from
 #   LATEST_VERSION (string): version baked into the binary at build time
-#   OC_BUN_IMAGE (string): generation's bun base image
+#   OC_BUN_IMAGE (string): bun base image selected from the tag's declaration
+#   OC_BUN_SOURCE (string): "tag" | "fallback" (diagnostics in the assert)
 #   OC_CHANNEL (string): release channel baked into the binary (see the
 #       generation table: v2 must bake "latest" or the server port hashes)
 #   BUILD_JOBS (int): bun/turbo concurrency
@@ -635,6 +685,20 @@ build_ocbin_source() {
   local container release_tag
   release_tag="${OPENCODE_TAG}"
   ocbin_source_layout
+
+  # 0. toolchain: the tag's own bun pin decides the base image. A failed host
+  #    lookup falls back to OC_BUN_FALLBACK and lets the post-checkout assert
+  #    decide, so an unreachable raw.githubusercontent does not zero-shot the
+  #    build into the wrong toolchain silently.
+  if OC_BUN_IMAGE=$(oc_bun_image_for "${release_tag}"); then
+    OC_BUN_SOURCE=tag
+  else
+    OC_BUN_IMAGE="${OC_BUN_FALLBACK}"
+    OC_BUN_SOURCE=fallback
+    warn " Could not read packageManager from ${release_tag}; falling back to ${OC_BUN_IMAGE}."
+  fi
+  info "==> bun toolchain for ${release_tag}: ${OC_BUN_IMAGE}"
+
   container=$(buildah from "${OC_BUN_IMAGE}")
   buildah config --env HOME=/mnt/host_cache/bun "$container"
   buildah config --env NODE_OPTIONS=--max-old-space-size=4096 "$container"
@@ -661,7 +725,8 @@ build_ocbin_source() {
     cp -r /mnt/host_cache/opencode_src/repo/. /src/opencode/
   "
 
-  # 2. fail fast if the tag wants a different bun than the generation table gave us
+  # 2. fail fast if the checkout's declared bun differs from the one that chose
+  #    the image (stale cache / moved tag / fallback guess)
   assert_bun_matches_tag "${CACHE}/opencode_src/repo"
 
   # 3. install + build. OPENCODE_VERSION and OPENCODE_CHANNEL are the same two
@@ -794,7 +859,7 @@ ocbin_source_build_cmds() {
 #   404, and no workflow creates one (publish.yml pushes npm and one ghcr image;
 #   release-github-action.yml only bumps github-v* tags for the legacy v1
 #   action). The npm launcher opencode-ai does not track v2 either -- its latest
-#   dist-tag is still 1.18.34. v2 ships as the per-platform package
+#   dist-tag tracks v1 (1.19.4). v2 ships as the per-platform package
 #   @opencode/cli-linux-x64, whose registry manifest carries a sha512
 #   dist.integrity for the tarball. Same guarantee, different authority.
 # Globals:
