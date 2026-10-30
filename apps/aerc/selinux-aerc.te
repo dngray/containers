@@ -18,34 +18,51 @@ gen_require(`
     type cpu_online_t;
     type data_home_t;
     type gpg_secret_t;
+    type netif_t;
+    type node_t;
     role system_r;
 
+    attribute container_domain;
+    attribute container_net_domain;
+    attribute mcs_constrained_type;
+
     class process { transition dyntransition fork signal signull sigkill getattr setkeycreate setsched noatsecure rlimitinh siginh execmem };
-    class dir { read write add_name remove_name getattr search watch setattr create open };
+    class dir { read write add_name remove_name getattr search watch setattr create open rmdir };
     class file { read write execute open getattr link unlink create append map rename lock execute_no_trans setattr ioctl };
     class lnk_file { read write create unlink getattr };
     class sock_file { read write create open getattr setattr unlink };
     class unix_stream_socket { connectto read write };
     class dbus { send_msg };
     class tcp_socket { create connect write read name_connect bind listen accept };
+    class udp_socket { create connect ioctl read write getattr setattr };
+    class unix_dgram_socket { create connect ioctl read write getattr setattr };
     class key { create };
     class cap_userns { dac_override dac_read_search };
     class fifo_file { write read open getattr create unlink };
+    class netif { tcp_send tcp_recv udp_send udp_recv };
+    class node { tcp_send tcp_recv udp_send udp_recv };
 ')
 
-# Define custom container execution domain
+# ==========================================
+# 📦 Core Domain & Container Hook Layer
+# ==========================================
 type aerc_t;
 role system_r types aerc_t;
 virt_sandbox_domain(aerc_t)
 
-# Define dedicated mail data label type
+# Register as standard container domains to handle dynamic MCS scaling
+typeattribute aerc_t container_domain;
+typeattribute aerc_t container_net_domain;
+typeattribute aerc_t mcs_constrained_type;
+
+# Define dedicated mail data label type relative to user home directory
 type aerc_data_t;
-files_type(aerc_data_t)
+userdom_user_home_content(aerc_data_t)
 
 ###########################################
 # ⚙️ Host & Runtime Service Management
 ###########################################
-allow container_runtime_t aerc_t:process { transition noatsecure rlimitinh siginh signal signull sigkill getattr };
+allow container_runtime_t aerc_t:process { transition noatsecure rlimitinh siginh signal signull sigkill getattr setcurrent dyntransition };
 allow container_runtime_t aerc_t:dir { search read open getattr };
 allow container_runtime_t aerc_t:file { read open getattr };
 allow container_runtime_t aerc_t:key { create };
@@ -67,19 +84,18 @@ allow aerc_t container_runtime_t:fifo_file { read write open getattr ioctl };
 allow pasta_t self:cap_userns { dac_override dac_read_search };
 
 # Mail data storage
-allow aerc_t aerc_data_t:dir { read write getattr search watch add_name remove_name setattr create };
+allow aerc_t aerc_data_t:dir { read write getattr search watch add_name remove_name setattr create open rmdir };
 allow aerc_t aerc_data_t:file { open read write getattr execute append create map rename unlink link lock setattr ioctl };
-allow aerc_t aerc_data_t:lnk_file { read write create unlink };
+allow aerc_t aerc_data_t:lnk_file { read write create unlink getattr };
 
 ###########################################
-# Reference policy interfaces
+# 🌐 Low-Level Network & Socket Layer
 ###########################################
-dev_rw_null(aerc_t)
-dev_read_rand(aerc_t)
-dev_read_urand(aerc_t)
-kernel_read_proc_symlinks(aerc_t)
-kernel_read_system_state(aerc_t)
-userdom_use_user_terminals(aerc_t)
+allow aerc_t self:udp_socket { create connect ioctl read write getattr setattr };
+allow aerc_t self:unix_dgram_socket { create connect ioctl read write getattr setattr };
+
+allow aerc_t netif_t:netif { tcp_send tcp_recv udp_send udp_recv };
+allow aerc_t node_t:node { tcp_send tcp_recv udp_send udp_recv };
 
 # Mail Ports & Network Infrastructure Layer
 sysnet_dns_name_resolve(aerc_t)
@@ -90,10 +106,20 @@ corenet_tcp_bind_generic_node(aerc_t)
 corenet_tcp_bind_all_unreserved_ports(aerc_t)
 corenet_tcp_connect_all_unreserved_ports(aerc_t)
 
+###########################################
+# 📁 Storage, System & Reference Interfaces
+###########################################
+dev_rw_null(aerc_t)
+dev_read_rand(aerc_t)
+dev_read_urand(aerc_t)
+kernel_read_proc_symlinks(aerc_t)
+kernel_read_system_state(aerc_t)
+userdom_use_user_terminals(aerc_t)
+
 # Hardware SmartCard (YubiKey) Access via System Macro
 pcscd_stream_connect(aerc_t)
 
-# User home content
+# User home content fallback maps
 userdom_manage_user_home_content_dirs(aerc_t)
 userdom_manage_user_home_content_files(aerc_t)
 
@@ -110,11 +136,11 @@ allow aerc_t data_home_t:lnk_file { read write create unlink getattr };
 allow aerc_t home_bin_t:file { open execute getattr read execute_no_trans };
 
 # Allow mbsync lock files in ~/.local/state (Secureblue labels it gconf_home_t)
-allow aerc_t gconf_home_t:dir { read write getattr search watch add_name remove_name setattr create open };
+allow aerc_t gconf_home_t:dir { read write getattr search watch add_name remove_name setattr create open rmdir };
 allow aerc_t gconf_home_t:file { read write getattr open create append link unlink rename lock setattr };
 
 ###########################################
-# Host IPC / D-Bus / pinentry
+# 🔑 Host IPC / D-Bus / pinentry / GnuPG
 ###########################################
 # Runtime environment access to mounted host tmpfs /run/user paths
 allow aerc_t user_tmp_t:dir { read write open getattr search watch add_name remove_name create setattr };
@@ -129,7 +155,7 @@ allow aerc_t unconfined_t:unix_stream_socket { connectto read write };
 allow aerc_t unconfined_dbusd_t:unix_stream_socket connectto;
 allow aerc_t unconfined_dbusd_t:dbus send_msg;
 
-# 🔐 Host Keyring Vaults (~/.gnupg permissions)
+# Host Keyring Vaults (~/.gnupg permissions)
 allow aerc_t gpg_secret_t:dir { read write getattr search watch add_name remove_name setattr };
 allow aerc_t gpg_secret_t:file { open read write getattr create append link unlink lock };
 allow aerc_t gpg_secret_t:sock_file { read write create open getattr setattr unlink };
@@ -140,7 +166,7 @@ unconfined_dbus_chat(aerc_t)
 allow aerc_t unconfined_t:process { transition rlimitinh siginh noatsecure };
 
 ###########################################
-# Terminal and system state
+# 💻 Terminal and system state
 ###########################################
 allow aerc_t cgroup_t:file { read open getattr };
 allow aerc_t proc_t:file { read open getattr };
