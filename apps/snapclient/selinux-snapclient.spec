@@ -1,6 +1,6 @@
 Name:           selinux-snapclient
 Version:        1.0
-Release:        1.fc44
+Release:        1.fc45
 Summary:        SELinux policy for isolated snapclient_t sandboxed container environments
 License:        MIT
 

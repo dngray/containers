@@ -1,6 +1,6 @@
 Name:           selinux-fortress
 Version:        1.0
-Release:        1.fc44
+Release:        1.fc45
 Summary:        Generic SELinux policy jail for AI agents (Aider, OpenCode, etc.)
 License:        MIT
 
