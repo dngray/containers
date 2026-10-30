@@ -10,11 +10,23 @@ gen_require(`
     type user_tmp_t;
     role system_r;
 
+    # Dynamic container sandboxing (same fix as aerc/fortress): crun hands the
+    # process a context carrying changing MCS category tags (s0:cXXX,cYYY), and
+    # the kernel drops the domain transition unless the target domain is
+    # registered as a container/MCS-constrained domain and holds
+    # dyntransition+setcurrent on the runtime transition check.
+    # NOTE: keep this block free of apostrophes -- m4 quotes gen_require with
+    # backtick/apostrophe pairs, so a lone one would terminate the body early
+    # and leave a stray quote for checkmodule to reject.
+    attribute container_domain;
+    attribute container_net_domain;
+    attribute mcs_constrained_type;
+
     class key { create };
-    class process { transition noatsecure rlimitinh siginh fork signal signull };
+    class process { transition dyntransition noatsecure rlimitinh siginh fork signal signull sigkill getattr setcurrent };
     class fd use;
     class fifo_file { write ioctl };
-    class file { read open getattr map write lock execute entrypoint };
+    class file { read open getattr map write lock execute entrypoint execute_no_trans };
     class dir { search read open getattr };
     class lnk_file read;
     class unix_stream_socket connectto;
@@ -31,6 +43,12 @@ type snapclient_t;
 role system_r types snapclient_t;
 virt_sandbox_domain(snapclient_t)
 
+# Register as a standard container domain so the runtime can pass dynamic MCS
+# tags into the sandbox, and so the transition is not rejected as unconfined.
+typeattribute snapclient_t container_domain;
+typeattribute snapclient_t container_net_domain;
+typeattribute snapclient_t mcs_constrained_type;
+
 # The entrypoint executable file type (Best Practice)
 type snapclient_exec_t;
 files_type(snapclient_exec_t)
@@ -42,6 +60,9 @@ files_type(snapclient_exec_t)
 # Allow the container runtime to transition to snapclient_t when executing snapclient_exec_t
 type_transition container_runtime_t snapclient_exec_t:process snapclient_t;
 
+# Keep the role valid across the transition (crun acts as system_r)
+role_transition system_r snapclient_t:process system_r;
+
 # Make snapclient_exec_t a valid entry point for the snapclient_t domain
 allow snapclient_t snapclient_exec_t:file entrypoint;
 
@@ -51,7 +72,7 @@ allow container_runtime_t snapclient_exec_t:file { read open getattr execute };
 # ========================================================
 # Internal & Self Process Rules
 # ========================================================
-allow snapclient_t self:process { fork signal };
+allow snapclient_t self:process { fork signal dyntransition transition };
 allow snapclient_t self:tcp_socket { create connect shutdown read ioctl write };
 allow snapclient_t self:udp_socket { create bind write read setopt };
 allow snapclient_t self:dir { search read open };
@@ -61,7 +82,7 @@ allow snapclient_t self:lnk_file read;
 # Container Runtime & Image File Access
 # ========================================================
 allow container_runtime_t snapclient_t:key create;
-allow container_runtime_t snapclient_t:process { transition noatsecure rlimitinh siginh signal signull };
+allow container_runtime_t snapclient_t:process { transition dyntransition setcurrent noatsecure rlimitinh siginh signal signull sigkill getattr };
 allow container_runtime_t snapclient_t:dir search;
 allow container_runtime_t snapclient_t:file { read open getattr };
 
