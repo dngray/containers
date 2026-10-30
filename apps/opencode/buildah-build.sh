@@ -150,7 +150,7 @@ CACHE="${REPO_ROOT}/build/opencode/cache" # host-side build cache (source, tarba
 DL="${CACHE}/opencode_dl"                 # downloaded opencode release tarballs
 STAGE="${CACHE}/buildah_stage"            # scratch area for compose-time files
 
-PYVER="${PYTHON_VERSION:-3.15.1}"
+PYVER="${PYTHON_VERSION:-3.15.2}"
 PY_CERT_ID="hugo@python.org"
 PY_OIDC_ISSUER="https://github.com/login/oauth"
 
@@ -189,7 +189,7 @@ BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
 # staged payload in compose_server) does not search. Dropping it costs 51MB and
 # that one stub; the collections the agent actually gets are the two baked
 # below.
-ANSIBLE_CORE_VERSION="${ANSIBLE_CORE_VERSION:-2.22.0rc1}"
+ANSIBLE_CORE_VERSION="${ANSIBLE_CORE_VERSION:-2.22.0rc2}"
 ANSIBLE_LINT_VERSION="${ANSIBLE_LINT_VERSION:-26.10.1}"
 ANSIBLE_POSIX_VERSION="${ANSIBLE_POSIX_VERSION:-2.2.2}"
 ANSIBLE_COMMUNITY_GENERAL_VERSION="${ANSIBLE_COMMUNITY_GENERAL_VERSION:-13.5.0}"
@@ -256,8 +256,8 @@ OC_BUN_FALLBACK="docker.io/oven/bun:1.4.4-debian"
 : "${OPENCODE_TAG:=v${LATEST_VERSION:-$OC_DEFAULT_VERSION}}"
 : "${RESOLVED_HASH:?resolve_version must run first}"
 
-BASE_IMG="${NS}/base:v1"
-TUI_BASE_IMG="${NS}/tui-base:v1"
+BASE_IMG="${NS}/base:${OPENCODE_API}"
+TUI_BASE_IMG="${NS}/tui-base:${OPENCODE_API}"
 PYDEX_IMG="${NS}/pydex:${PYVER}"
 PGA_IMG="${NS}/pgassets:${PGVER}"
 RUST_IMG="${NS}/rusttools:latest"
@@ -1074,7 +1074,7 @@ build_rusttools() {
     git clone --branch main --single-branch https://github.com/yvgude/lean-ctx.git /tmp/lean-ctx
     cd /tmp/lean-ctx/rust
 
-    sed -i '/\\[patch\\.crates-io\\]/a zip = { git = \"https://github.com/zip-rs/zip2.git\", tag = \"v9.0.5\" }' Cargo.toml
+    sed -i '/\\[patch\\.crates-io\\]/a zip = { git = \"https://github.com/zip-rs/zip2.git\", tag = \"v9.1.3\" }' Cargo.toml
     cargo install --path . --root /usr/local --jobs ${BUILD_JOBS}
 
     cd /
