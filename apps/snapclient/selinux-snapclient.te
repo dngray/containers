@@ -14,7 +14,7 @@ gen_require(`
     class process { transition noatsecure rlimitinh siginh fork signal signull };
     class fd use;
     class fifo_file { write ioctl };
-    class file { read open getattr map write lock };
+    class file { read open getattr map write lock execute entrypoint };
     class dir { search read open getattr };
     class lnk_file read;
     class unix_stream_socket connectto;
@@ -22,22 +22,49 @@ gen_require(`
     class sock_file { write read open getattr };
 ')
 
+# ========================================================
+# Type Declarations & Domain Setup
+# ========================================================
+
+# The running container process domain
 type snapclient_t;
 role system_r types snapclient_t;
 virt_sandbox_domain(snapclient_t)
 
+# The entrypoint executable file type (Best Practice)
+type snapclient_exec_t;
+files_type(snapclient_exec_t)
+
+# ========================================================
+# Domain Transition Rules
+# ========================================================
+
+# Allow the container runtime to transition to snapclient_t when executing snapclient_exec_t
+type_transition container_runtime_t snapclient_exec_t:process snapclient_t;
+
+# Make snapclient_exec_t a valid entry point for the snapclient_t domain
+allow snapclient_t snapclient_exec_t:file entrypoint;
+
+# Allow container runtime to see and run the entrypoint script
+allow container_runtime_t snapclient_exec_t:file { read open getattr execute };
+
+# ========================================================
 # Internal & Self Process Rules
+# ========================================================
 allow snapclient_t self:process { fork signal };
 allow snapclient_t self:tcp_socket { create connect shutdown read ioctl write };
 allow snapclient_t self:udp_socket { create bind write read setopt };
 allow snapclient_t self:dir { search read open };
 allow snapclient_t self:lnk_file read;
 
-# Container runtime and image file access
+# ========================================================
+# Container Runtime & Image File Access
+# ========================================================
 allow container_runtime_t snapclient_t:key create;
 allow container_runtime_t snapclient_t:process { transition noatsecure rlimitinh siginh signal signull };
 allow container_runtime_t snapclient_t:dir search;
 allow container_runtime_t snapclient_t:file { read open getattr };
+
 allow snapclient_t container_runtime_t:fd use;
 allow snapclient_t container_runtime_t:fifo_file { write ioctl };
 allow snapclient_t container_file_t:dir search;
@@ -46,17 +73,23 @@ allow snapclient_t container_file_t:lnk_file read;
 allow snapclient_t tmpfs_t:file map;
 allow snapclient_t unconfined_t:unix_stream_socket connectto;
 
+# ========================================================
 # Kernel & Hardware Layer
+# ========================================================
 kernel_read_proc_symlinks(snapclient_t)
 allow snapclient_t sound_device_t:chr_file { read write open ioctl };
 dev_rw_null(snapclient_t)
 dev_read_rand(snapclient_t)
 
+# ========================================================
 # Network Layer
+# ========================================================
 corenet_udp_bind_all_nodes(snapclient_t)
 corenet_tcp_connect_all_unreserved_ports(snapclient_t)
 
-# PulseAudio/PipeWire client access
+# ========================================================
+# Audio Interop (PulseAudio / PipeWire / Sound)
+# ========================================================
 pulseaudio_rw_home_files(snapclient_t)
 
 # Random seeding needs /dev/urandom access
