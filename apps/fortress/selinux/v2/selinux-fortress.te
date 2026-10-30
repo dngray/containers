@@ -10,7 +10,24 @@ gen_require(`
     type sysfs_t;
     type tmpfs_t;
     type node_t;
+    type netif_t;
     class process2 nnp_transition;
+
+    # Required for Polkit/PAM enhancements
+    type policykit_auth_t;
+    type faillog_t;
+    type systemd_homed_t;
+
+    # Explicitly require the dbus class and its permissions
+    class dbus send_msg;
+
+    # Core system infrastructure attributes mapping container access parameters
+    attribute container_domain;
+    attribute container_net_domain;
+    attribute mcs_constrained_type;
+
+    # Explicitly pull roles into scope for the transition setup
+    role system_r;
 ')
 
 ########################################
@@ -18,6 +35,12 @@ gen_require(`
 ########################################
 type fortress_agent_t;
 domain_type(fortress_agent_t)
+
+# Register as standard container domains to handle dynamic MCS scaling natively
+# This mirrors the successful aerc integration and clears the s0 level boundary blocks.
+typeattribute fortress_agent_t container_domain;
+typeattribute fortress_agent_t container_net_domain;
+typeattribute fortress_agent_t mcs_constrained_type;
 
 type fortress_src_t;
 files_type(fortress_src_t)
@@ -39,6 +62,13 @@ type_transition fortress_agent_t fortress_config_t:dir fortress_config_t;
 # Managed domain transition from Podman/crun
 allow container_runtime_t fortress_agent_t:process { transition dyntransition siginh rlimitinh noatsecure getcap getattr getsched share };
 virt_sandbox_domain(fortress_agent_t)
+
+# Establish role tracking consistency for the process instantiation
+role_transition system_r fortress_agent_t:process system_r;
+
+# Entrypoint permissions for the container overlay filesystem paths
+# Allows files inside the image (like bash or opencode) to act as entrypoints.
+allow fortress_agent_t container_file_t:file entrypoint;
 
 # Allows crun to shift domains when no-new-privileges is active
 allow container_runtime_t fortress_agent_t:process2 { nnp_transition };
@@ -172,3 +202,15 @@ allow fortress_agent_t self:unix_stream_socket create_stream_socket_perms;
 # container_runtime_t was dropped, but the boolean-gated `domain_fd_use` rule
 # still permits fd passing until that boolean is disabled.
 allow fortress_agent_t container_runtime_t:fifo_file { read write append getattr ioctl };
+
+########################################
+# System Authentication Enhancements
+########################################
+# Allows polkit authentication agents to manage the faillock directory
+# tracking failed logins on tmpfs layouts, and permits required DAC capabilities.
+allow policykit_auth_t faillog_t:dir { write add_name search };
+allow policykit_auth_t self:capability { dac_read_search dac_override };
+
+# Authorises D-Bus communication between policykit_auth_t and systemd_homed_t
+# over dbus-broker, clearing benign communication bottlenecks.
+allow policykit_auth_t systemd_homed_t:dbus send_msg;
