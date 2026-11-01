@@ -1,0 +1,27 @@
+name: radicale
+services:
+  radicale:
+    extends:
+      file: ../_common/app.yml
+      service: app
+    image: ghcr.io/kozea/radicale:stable
+    container_name: radicale
+    hostname: radicale
+    user: "1003:1003"
+    volumes:
+      - /opt/appdata/radicale/data/collections:/var/lib/radicale/collections
+      - /opt/appdata/radicale/config:/etc/radicale/config:ro
+      - /opt/appdata/radicale/users:/etc/radicale/users:ro
+    networks:
+      frontend:
+      traefik:
+
+networks:
+  frontend:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 172.36.0.0/16
+        - subnet: fd36:1::/48
+  traefik:
+    external: true

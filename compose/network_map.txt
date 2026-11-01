@@ -29,6 +29,7 @@ they now use auto-assigned (DHCP) IPs. Only runc containers keep static IPs.
   vault        (vault,      runtime: runsc-systrap)
   flexo        (flexo,      runtime: runsc-systrap)
   tang         (tang,       runtime: runsc-systrap)
+  radicale     (radicale,   runtime: runsc-systrap)
   mpd          (music,      runtime: runc — app-runc, auto IP)
 
 
@@ -99,6 +100,9 @@ mumble       172.34.0.0/16  (fd34:1::/48)
 tang         172.35.0.0/16  (fd35:1::/48)
   frontend   (auto IP)     tang         (port 8080, runsc-systrap, auto IP)
 
+radicale     172.36.0.0/16  (fd36:1::/48)
+  frontend   (auto IP)     radicale     (port 5232, runsc-systrap, auto IP)
+
 SERVICES WITHOUT ROUTABLE STATIC IPs
 ------------------------------------
 These extend 'app' profile and use default bridge or no network config:
@@ -131,6 +135,7 @@ miniflux        http://wg3:8080         VPN (wg3_general, FS via 127.0.0.1:8191)
 mpd/cyp         http://mpd:8080         LAN
 navidrome       http://wg3:4533         VPN (wg3_general)
 pypowerwall     http://pypowerwall:8675 LAN
+radicale        http://radicale:5232    LAN
 qbittorrent     http://wg1:8081         VPN (wg1_qbt)
 sabnzbd         http://wg2:6767         VPN (wg2_usenet)
 snapcast/snapweb http://mpd:1780        LAN
