@@ -1,0 +1,36 @@
+[Unit]
+Description=SillyTavern AI Frontend
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=900
+
+[Container]
+ContainerName=sillytavern
+Image=ghcr.io/sillytavern/sillytavern:latest
+AutoUpdate=registry
+UserNS=keep-id
+Environment=PUID=%U
+Environment=PGID=%G
+PublishPort=127.0.0.1:8000:8000
+# pasta rewrites the host's loopback source to the host's LAN address, which the
+# stock SillyTavern whitelist (127.0.0.1/::1) then rejects. Keep it as loopback.
+Network=pasta:--host-lo-to-ns-lo
+Environment=NODE_ENV=production
+Environment=FORCE_COLOR=1
+Environment=SILLYTAVERN_HEARTBEATINTERVAL=30
+Volume=%h/.config/sillytavern:/home/node/app/config:Z
+Volume=%h/.local/share/sillytavern/data:/home/node/app/data:Z
+Volume=%h/.local/share/sillytavern/plugins:/home/node/app/plugins:Z
+Volume=%h/.local/share/sillytavern/extensions:/home/node/app/public/scripts/extensions/third-party:Z
+HealthCmd=node src/healthcheck.js
+HealthInterval=30s
+HealthTimeout=10s
+HealthStartPeriod=20s
+HealthRetries=3
+
+[Install]
+WantedBy=default.target

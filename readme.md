@@ -6,7 +6,8 @@ Just the containers I use.
 
 ```
 apps/          per-service scripts (aerc, crowdin, davmail, goose, imapfilter,
-               neovim, opencode, snapclient, tftp) — the `just` recipes call these
+               neovim, opencode, sillytavern, snapclient, tftp) — the `just`
+               recipes call these
 bin/           repo-side tooling (code-fortress, ai-secure, build-selinux,
                create-rpm, debian-build-neovim)
 build/         build context directories (Containerfiles, SELinux sources)

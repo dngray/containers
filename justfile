@@ -176,6 +176,26 @@ neovim-parsers-build:
 neovim-parsers-clean:
     ./apps/neovim/treesitter.sh clean
 
+# Start SillyTavern web UI (rootless quadlet)
+[group('podman')]
+st:
+    ./apps/sillytavern/sillytavern.sh start
+
+# Stop the SillyTavern quadlet
+[group('podman')]
+st-down:
+    ./apps/sillytavern/sillytavern.sh stop
+
+# Pull the upstream SillyTavern image
+[group('podman')]
+st-pull:
+    ./apps/sillytavern/sillytavern.sh pull
+
+# Remove SillyTavern container and image (host config/data kept)
+[group('podman')]
+st-clean:
+    ./apps/sillytavern/sillytavern.sh clean
+
 # Build Snapcast client container for laptop playback
 [group('podman')]
 snapclient-build:
