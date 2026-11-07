@@ -1074,8 +1074,7 @@ build_rusttools() {
     git clone --branch main --single-branch https://github.com/yvgude/lean-ctx.git /tmp/lean-ctx
     cd /tmp/lean-ctx/rust
 
-    sed -i '/\\[patch\\.crates-io\\]/a zip = { git = \"https://github.com/zip-rs/zip2.git\", tag = \"v9.4.1\" }' Cargo.toml
-    cargo install --path . --root /usr/local --jobs ${BUILD_JOBS}
+    cargo install --path ./crates/lean-ctx --root /usr/local --jobs ${BUILD_JOBS}
 
     cd /
     rm -rf /tmp/lean-ctx
