@@ -1,3 +1,6 @@
+stacked_pane_list false
+pane_frame_style "full"
+
 layout {
     pane size=1 borderless=true {
         plugin location="zellij:tab-bar"
