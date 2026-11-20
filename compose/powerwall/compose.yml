@@ -29,7 +29,7 @@ services:
     extends:
       file: powerwall_common.yml
       service: powerwall_apps
-    image: docker.io/jasonacox/pypowerwall:0.21.0t108
+    image: jasonacox/pypowerwall-server:0.16.0
     container_name: pypowerwall
     hostname: pypowerwall
     ulimits:
@@ -41,6 +41,7 @@ services:
     env_file: ./data/pypowerwall.env
     volumes:
       - /opt/appdata/pypowerwall/.auth:/app/.auth
+      - /opt/appdata/pypowerwall/.pypowerwall_data:/.pypowerwall_data
     networks:
       pypowerwall_backend:
         ipv4_address: 172.28.0.2
